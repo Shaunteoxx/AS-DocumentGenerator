@@ -1,0 +1,6 @@
+.env
+credentials.json
+__pycache__/
+*.pyc
+node_modules/
+.gitignore

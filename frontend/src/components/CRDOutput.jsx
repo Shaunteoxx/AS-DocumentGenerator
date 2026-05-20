@@ -5,7 +5,7 @@ import { useGoogleLogin } from '@react-oauth/google'
 import { DownloadIcon, PencilIcon, SparklesIcon, XIcon, CloudUploadIcon } from './Icons'
 import { extractClientName } from '../utils'
 
-const API = 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const GDOCS_TOKEN_KEY = 'google_oauth_token'
 const GDOCS_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

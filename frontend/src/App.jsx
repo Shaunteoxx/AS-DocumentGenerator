@@ -6,7 +6,7 @@ import CRDHistoryModal from './components/CRDHistoryModal'
 import { CheckCircleIcon, HistoryIcon, TrashIcon } from './components/Icons'
 import { extractClientName } from './utils'
 
-const API = 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const HISTORY_KEY = 'crd_history'
 
 function loadHistory() {
