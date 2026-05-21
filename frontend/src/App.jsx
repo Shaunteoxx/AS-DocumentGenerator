@@ -131,7 +131,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col font-sans text-brand-main bg-zinc-50/50">
       <header className="sticky top-0 z-40 w-full bg-white border-b border-zinc-200">
         <div className="w-full max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4 cursor-pointer group" onClick={() => setStep(AppStep.Input)}>
+          <div className="flex items-center gap-4 cursor-pointer group" onClick={reset}>
             <div className="bg-white p-1.5 rounded-lg border border-zinc-100 shadow-sm overflow-hidden flex items-center justify-center">
               <img src='https://firebasestorage.googleapis.com/v0/b/sg-as-price-list.firebasestorage.app/o/Screenshot%202026-02-04%20021131.png?alt=media' alt="Allocate Space Logo" className="h-8 w-auto object-contain" />
             </div>
