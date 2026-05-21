@@ -1,5 +1,5 @@
 # CRD Generator API
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Cookie, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -16,6 +16,9 @@ import subprocess
 import tempfile
 import logging
 import datetime
+import httpx
+import jwt
+from jwt import PyJWKClient
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,9 +27,16 @@ genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 app = FastAPI(title="CRD Generator API")
 
+ALLOWED_ORIGINS = [
+    "https://project-xwokx.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -37,7 +47,41 @@ SHEET_ID = "1JOsrTwUMpJ9cKKXgAAdSZRd_mJquhajAAvnIsk6B__I"
 SHEET_WORKSHEET = "Feature"
 MODEL_NAME = "gemini-2.5-flash"
 
+CORRIDOR_BASE_URL = os.getenv("CORRIDOR_BASE_URL", "https://www.corridor.cloud")
+CORRIDOR_CLIENT_ID = os.getenv("CORRIDOR_CLIENT_ID", "")
+CORRIDOR_API_KEY = os.getenv("CORRIDOR_CLOUD_API_KEY", "")
+CORRIDOR_REDIRECT_URI = os.getenv("CORRIDOR_REDIRECT_URI", "")
+DEV_AUTH_BYPASS = os.getenv("DEV_AUTH_BYPASS", "false").lower() == "true"
+
 logger = logging.getLogger(__name__)
+
+_jwks_client: PyJWKClient | None = None
+
+
+def get_jwks_client() -> PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = PyJWKClient(f"{CORRIDOR_BASE_URL}/api/oauth/jwks")
+    return _jwks_client
+
+
+def verify_token(token: str) -> dict:
+    client = get_jwks_client()
+    signing_key = client.get_signing_key_from_jwt(token)
+    return jwt.decode(token, signing_key.key, algorithms=["RS256"], audience=CORRIDOR_CLIENT_ID)
+
+
+async def require_auth(access_token: str | None = Cookie(default=None)) -> dict:
+    if DEV_AUTH_BYPASS:
+        return {"sub": "dev"}
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        return verify_token(access_token)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 def get_features_from_sheet() -> str:
@@ -94,24 +138,6 @@ def extract_client_name_from_crd(md: str) -> str:
     return ""
 
 
-# NOTE: The service account must have Editor access (not Viewer) on the Google Sheet
-# for write operations to succeed. Update sharing settings at:
-# https://docs.google.com/spreadsheets/d/1JOsrTwUMpJ9cKKXgAAdSZRd_mJquhajAAvnIsk6B__I/edit#gid=0
-# Share → Add the service account email → set role to Editor.
-def write_to_cr_sheet(crd_id: str, client_name: str) -> None:
-    import gspread
-    from google.oauth2.service_account import Credentials
-
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
-    gc = gspread.authorize(creds)
-    ws = gc.open_by_key(SHEET_ID).worksheet("CR")
-
-    date_str = datetime.date.today().strftime("%-d %b %y")
-    # Column order: ID | Project Name | Input Folder | CRD Document | Date Submitted | BRD | Features | Est. End Date
-    ws.append_row([crd_id, client_name, "", "", date_str, "", "", ""], value_input_option="RAW", insert_data_option="INSERT_ROWS")
-
-
 def load_context() -> str:
     parts = []
     for f in sorted(CONTEXT_DIR.glob("*")):
@@ -154,8 +180,116 @@ def extract_text(ext: str, content: bytes) -> str:
     return ""
 
 
+def _name_to_crd_id(client_name: str, version: int = 1) -> str:
+    words = [w for w in client_name.split() if w]
+    if len(words) >= 2:
+        initials = words[0][0].upper() + words[1][0].upper()
+    elif len(words) == 1 and len(words[0]) >= 2:
+        initials = words[0][:2].upper()
+    elif len(words) == 1:
+        initials = (words[0][0] * 2).upper()
+    else:
+        return f"C-XX-{version}"
+    return f"C-{initials}-{version}"
+
+
+def generate_crd_id(md: str, version: int = 1) -> str:
+    match = re.search(r'\|\s*\*{0,2}Client\s+Name\*{0,2}\s*\|\s*([^|\n]+)\|', md, re.IGNORECASE)
+    if not match:
+        return f"C-XX-{version}"
+    return _name_to_crd_id(match.group(1).strip(), version)
+
+
+def extract_id_from_notes(text: str, version: int = 1) -> str:
+    patterns = [
+        r'(?:Client|Company|Account|Customer)(?:\s+Name)?\s*[:\-]\s*([^\n,\.]{2,80})',
+        r'\|\s*\*{0,2}Client\s+Name\*{0,2}\s*\|\s*([^|\n]+)\|',
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            name = m.group(1).strip().rstrip('.,')
+            if name:
+                return _name_to_crd_id(name, version)
+    return f"C-XX-{version}"
+
+
+# ── Auth endpoints ────────────────────────────────────────────────────────────
+
+class TokenExchangeRequest(BaseModel):
+    code: str
+    code_verifier: str
+
+
+@app.post("/auth/token")
+async def auth_token(req: TokenExchangeRequest, response: Response):
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{CORRIDOR_BASE_URL}/api/oauth/token",
+            json={
+                "grant_type": "authorization_code",
+                "client_id": CORRIDOR_CLIENT_ID,
+                "code": req.code,
+                "redirect_uri": CORRIDOR_REDIRECT_URI,
+                "code_verifier": req.code_verifier,
+            },
+            headers={"X-API-Key": CORRIDOR_API_KEY},
+        )
+    if r.status_code != 200:
+        logger.error("Corridor token exchange failed: %s %s", r.status_code, r.text)
+        raise HTTPException(status_code=400, detail="Token exchange failed")
+    data = r.json()
+    is_secure = not DEV_AUTH_BYPASS
+    cookie_opts = dict(httponly=True, secure=is_secure, samesite="none" if is_secure else "lax")
+    response.set_cookie("access_token", data["access_token"], max_age=data.get("expires_in", 3600), **cookie_opts)
+    response.set_cookie("refresh_token", data["refresh_token"], max_age=30 * 24 * 3600, **cookie_opts)
+    return {"ok": True}
+
+
+@app.post("/auth/refresh")
+async def auth_refresh(response: Response, refresh_token: str | None = Cookie(default=None)):
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{CORRIDOR_BASE_URL}/api/oauth/token",
+            json={
+                "grant_type": "refresh_token",
+                "client_id": CORRIDOR_CLIENT_ID,
+                "refresh_token": refresh_token,
+            },
+            headers={"X-API-Key": CORRIDOR_API_KEY},
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Token refresh failed")
+    data = r.json()
+    is_secure = not DEV_AUTH_BYPASS
+    cookie_opts = dict(httponly=True, secure=is_secure, samesite="none" if is_secure else "lax")
+    response.set_cookie("access_token", data["access_token"], max_age=data.get("expires_in", 3600), **cookie_opts)
+    if "refresh_token" in data:
+        response.set_cookie("refresh_token", data["refresh_token"], max_age=30 * 24 * 3600, **cookie_opts)
+    return {"ok": True}
+
+
+@app.post("/auth/logout")
+async def auth_logout(response: Response):
+    response.delete_cookie("access_token", samesite="none", secure=True)
+    response.delete_cookie("refresh_token", samesite="none", secure=True)
+    return {"ok": True}
+
+
+@app.get("/auth/me")
+async def auth_me(claims: dict = Depends(require_auth)):
+    return claims
+
+
+# ── Existing endpoints (all protected) ───────────────────────────────────────
+
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    _: dict = Depends(require_auth),
+):
     ext = Path(file.filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
@@ -182,6 +316,8 @@ class ExportRequest(BaseModel):
 
 class RegenerateRequest(BaseModel):
     crd: str
+    section: str = ""
+    instruction: str = ""
 
 
 class LogToSheetRequest(BaseModel):
@@ -194,6 +330,7 @@ class LogToSheetRequest(BaseModel):
 async def analyze(
     notes: str = Form(default=""),
     files: list[UploadFile] = File(default=[]),
+    _: dict = Depends(require_auth),
 ):
     file_parts = []
     for file in files:
@@ -223,7 +360,7 @@ Client Notes:
 
 
 @app.post("/clarify")
-async def clarify(req: ClarifyRequest):
+async def clarify(req: ClarifyRequest, _: dict = Depends(require_auth)):
     model = get_model(load_context())
     answers_text = ""
     if req.answers:
@@ -264,44 +401,8 @@ Respond with ONLY a JSON array of question strings, no other text. Example: ["Qu
     return {"questions": questions}
 
 
-def _name_to_crd_id(client_name: str, version: int = 1) -> str:
-    words = [w for w in client_name.split() if w]
-    if len(words) >= 2:
-        initials = words[0][0].upper() + words[1][0].upper()
-    elif len(words) == 1 and len(words[0]) >= 2:
-        initials = words[0][:2].upper()
-    elif len(words) == 1:
-        initials = (words[0][0] * 2).upper()
-    else:
-        return f"C-XX-{version}"
-    return f"C-{initials}-{version}"
-
-
-def generate_crd_id(md: str, version: int = 1) -> str:
-    """Derive CRD ID from a generated markdown document (table format)."""
-    match = re.search(r'\|\s*\*{0,2}Client\s+Name\*{0,2}\s*\|\s*([^|\n]+)\|', md, re.IGNORECASE)
-    if not match:
-        return f"C-XX-{version}"
-    return _name_to_crd_id(match.group(1).strip(), version)
-
-
-def extract_id_from_notes(text: str, version: int = 1) -> str:
-    """Derive CRD ID from plain-text notes or analysis before generation."""
-    patterns = [
-        r'(?:Client|Company|Account|Customer)(?:\s+Name)?\s*[:\-]\s*([^\n,\.]{2,80})',
-        r'\|\s*\*{0,2}Client\s+Name\*{0,2}\s*\|\s*([^|\n]+)\|',
-    ]
-    for pat in patterns:
-        m = re.search(pat, text, re.IGNORECASE)
-        if m:
-            name = m.group(1).strip().rstrip('.,')
-            if name:
-                return _name_to_crd_id(name, version)
-    return f"C-XX-{version}"
-
-
 @app.post("/generate")
-async def generate(req: GenerateRequest):
+async def generate(req: GenerateRequest, _: dict = Depends(require_auth)):
     model = get_model(load_context())
     answers_text = "\n".join(
         f"Q: {a['question']}\nA: {a['answer']}" for a in req.answers
@@ -309,8 +410,6 @@ async def generate(req: GenerateRequest):
 
     filename = req.filename.strip()
 
-    # Pre-derive the ID from plain-text notes before calling the model so the
-    # prompt injection always fires with a real value, not an empty string.
     if not filename:
         filename = extract_id_from_notes(req.notes + "\n" + req.analysis)
 
@@ -344,8 +443,6 @@ Produce the full CRD in Markdown format.{filename_instruction}"""
     crd = response.text
     crd_id = filename
 
-    # Guarantee the Docs ID cell in the document matches crd_id regardless of
-    # what the model wrote, so the UI filename and document content always agree.
     crd = re.sub(
         r'(\|\s*\*{0,2}Docs\s+ID\*{0,2}\s*\|)([^|\n]*)(\|)',
         lambda m: f"{m.group(1)} {crd_id} {m.group(3)}",
@@ -356,7 +453,7 @@ Produce the full CRD in Markdown format.{filename_instruction}"""
 
 
 @app.post("/regenerate")
-async def regenerate_section(req: RegenerateRequest):
+async def regenerate_section(req: RegenerateRequest, _: dict = Depends(require_auth)):
     if not req.section.strip():
         raise HTTPException(status_code=400, detail="section is required")
     model = get_model(load_context())
@@ -375,7 +472,7 @@ Return ONLY the complete updated Markdown document with that section rewritten. 
 
 
 @app.post("/export/docx")
-async def export_docx(req: ExportRequest):
+async def export_docx(req: ExportRequest, _: dict = Depends(require_auth)):
     script = Path(__file__).parent / "md_to_docx.js"
     with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w", encoding="utf-8") as md_f:
         md_f.write(req.crd)
@@ -404,7 +501,7 @@ async def export_docx(req: ExportRequest):
 
 
 @app.post("/log-to-sheet")
-async def log_to_sheet(req: LogToSheetRequest):
+async def log_to_sheet(req: LogToSheetRequest, _: dict = Depends(require_auth)):
     date_str = datetime.date.today().strftime("%-d %b %y")
     try:
         import gspread
@@ -414,7 +511,6 @@ async def log_to_sheet(req: LogToSheetRequest):
         creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
         gc = gspread.authorize(creds)
         ws = gc.open_by_key(SHEET_ID).worksheet("CR")
-        # Column order: ID | Project Name | Input Folder | CRD Document | Date Submitted | BRD | Features | Est. End Date
         ws.append_row(
             [req.filename, req.client_name, "", req.drive_link, date_str, "", "", ""],
             value_input_option="RAW",

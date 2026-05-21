@@ -33,6 +33,7 @@ async function doUploadToDrive(token, mdContent, fileName) {
   const exportRes = await fetch(`${API}/export/docx`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ crd: mdContent }),
   })
   if (!exportRes.ok) throw new Error(`DOCX export failed (${exportRes.status})`)
@@ -81,6 +82,7 @@ async function logUploadToSheet(filename, clientName, driveLink) {
     await fetch(`${API}/log-to-sheet`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ filename, client_name: clientName, drive_link: driveLink }),
     })
   } catch {

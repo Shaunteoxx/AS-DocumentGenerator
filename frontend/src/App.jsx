@@ -1,13 +1,39 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import UploadArea from './components/UploadArea'
 import ChatDisplay from './components/ChatDisplay'
 import CRDOutput from './components/CRDOutput'
 import CRDHistoryModal from './components/CRDHistoryModal'
+import AuthCallback from './components/AuthCallback'
 import { CheckCircleIcon, HistoryIcon, TrashIcon } from './components/Icons'
 import { extractClientName } from './utils'
+import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const HISTORY_KEY = 'crd_history'
+
+const CORRIDOR_BASE = import.meta.env.VITE_CORRIDOR_BASE_URL || 'https://www.corridor.cloud'
+const CORRIDOR_CLIENT_ID = import.meta.env.VITE_CORRIDOR_CLIENT_ID || ''
+const CORRIDOR_PROJECT_SLUG = import.meta.env.VITE_CORRIDOR_PROJECT_SLUG || 'crd-generator'
+const CORRIDOR_REDIRECT_URI = import.meta.env.VITE_CORRIDOR_REDIRECT_URI || `${window.location.origin}/auth/callback`
+
+async function redirectToCorridorAuth() {
+  const verifier = generateCodeVerifier()
+  const challenge = await generateCodeChallenge(verifier)
+  const state = generateState()
+  sessionStorage.setItem('pkce_code_verifier', verifier)
+  sessionStorage.setItem('pkce_state', state)
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: CORRIDOR_CLIENT_ID,
+    redirect_uri: CORRIDOR_REDIRECT_URI,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state,
+    launch_project_slug: CORRIDOR_PROJECT_SLUG,
+    scope: 'microapp',
+  })
+  window.location.href = `${CORRIDOR_BASE}/oauth/authorize?${params}`
+}
 
 function loadHistory() {
   try {
@@ -18,6 +44,9 @@ function loadHistory() {
 }
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
+
   const [phase, setPhase] = useState(1)
   const [notes, setNotes] = useState('')
   const [files, setFiles] = useState([])
@@ -31,6 +60,51 @@ export default function App() {
   const [historyModalEntry, setHistoryModalEntry] = useState(null)
   const [currentHistoryId, setCurrentHistoryId] = useState(null)
 
+  useEffect(() => {
+    if (window.location.pathname === '/auth/callback') return
+
+    fetch(`${API}/auth/me`, { credentials: 'include' })
+      .then(r => {
+        if (r.ok) {
+          setAuthenticated(true)
+          setAuthLoading(false)
+          // Strip corridor launch params from URL
+          const url = new URL(window.location.href)
+          if (url.searchParams.has('launch')) {
+            url.searchParams.delete('launch')
+            url.searchParams.delete('project')
+            window.history.replaceState({}, '', url.toString())
+          }
+        } else {
+          redirectToCorridorAuth()
+        }
+      })
+      .catch(() => redirectToCorridorAuth())
+  }, [])
+
+  // Callback route
+  if (window.location.pathname === '/auth/callback') {
+    return (
+      <AuthCallback
+        onSuccess={() => {
+          setAuthenticated(true)
+          setAuthLoading(false)
+          window.history.replaceState({}, '', '/')
+        }}
+        onError={() => setAuthLoading(false)}
+      />
+    )
+  }
+
+  // Auth loading / redirecting to Corridor
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <p className="text-sm text-gray-500">Signing in…</p>
+      </div>
+    )
+  }
+
   const handleAnalyze = async () => {
     setLoading(true)
     setError('')
@@ -39,7 +113,7 @@ export default function App() {
       formData.append('notes', notes)
       files.forEach(f => formData.append('files', f))
 
-      const res = await fetch(`${API}/analyze`, { method: 'POST', body: formData })
+      const res = await fetch(`${API}/analyze`, { method: 'POST', body: formData, credentials: 'include' })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
       setAnalysis(data.analysis)
@@ -49,6 +123,7 @@ export default function App() {
       const res2 = await fetch(`${API}/clarify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ notes: combinedNotes, analysis: data.analysis, answers: [] }),
       })
       if (!res2.ok) throw new Error(await res2.text())
@@ -56,7 +131,7 @@ export default function App() {
       setQuestions(data2.questions)
       setPhase(2)
     } catch (e) {
-      setError(`Analysis failed: ${e.message}. Is the backend running on port 8000?`)
+      setError(`Analysis failed: ${e.message}`)
     } finally {
       setLoading(false)
     }
@@ -69,6 +144,7 @@ export default function App() {
       const res = await fetch(`${API}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ notes, analysis, answers, filename: crdId }),
       })
       if (!res.ok) throw new Error(await res.text())

@@ -21,8 +21,8 @@ steps:
       - --region=asia-southeast1
       - --project=microapps-479605
       - --allow-unauthenticated
-      - --set-env-vars=GOOGLE_CREDENTIALS_PATH=/secrets/credentials.json
-      - --set-secrets=GOOGLE_API_KEY=gemini-api-key:latest,/secrets/credentials.json=crd-credentials:latest
+      - --set-env-vars=GOOGLE_CREDENTIALS_PATH=/secrets/credentials.json,CORRIDOR_BASE_URL=https://www.corridor.cloud,CORRIDOR_CLIENT_ID=cc_mc_0qzgw5o4bpyvo0uhzce17zk1,CORRIDOR_REDIRECT_URI=https://project-xwokx.vercel.app/auth/callback,CORRIDOR_PROJECT_SLUG=crd-generator
+      - --set-secrets=GOOGLE_API_KEY=gemini-api-key:latest,/secrets/credentials.json=crd-credentials:latest,CORRIDOR_CLOUD_API_KEY=corridor-api-key:latest
 
 images:
   - gcr.io/microapps-479605/crd-backend:$COMMIT_SHA
