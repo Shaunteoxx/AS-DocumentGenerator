@@ -67,15 +67,18 @@ export default function App() {
       .then(r => {
         if (r.ok) {
           setAuthenticated(true)
+          setAuthLoading(false)
           const url = new URL(window.location.href)
           if (url.searchParams.has('launch')) {
             url.searchParams.delete('launch')
             url.searchParams.delete('project')
             window.history.replaceState({}, '', url.toString())
           }
+        } else {
+          redirectToCorridorAuth()
         }
       })
-      .finally(() => setAuthLoading(false))
+      .catch(() => redirectToCorridorAuth())
   }, [])
 
   // Callback route
