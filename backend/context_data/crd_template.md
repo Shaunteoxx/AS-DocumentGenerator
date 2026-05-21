@@ -102,24 +102,24 @@ Example:
 
 ---
 
-## 3. Client Solutions
+## 3. Business Requirements
 
 <!--
 AI Instructions:
-- Create one row for each distinct solution the client is asking for, based on §2.2 Desired Outcome.
-- Each row is a solution-level need — not a granular feature or sub-requirement. Group related actions into one solution row.
-- ID: use the format CR-01, CR-02, CR-03 and so on, incrementing for each solution.
-- Solution Name: write a short plain English name for the solution — no acronyms, no jargon. e.g. "Permit application management", "Attendance taking", "Solar Energy monitoring and reporting". Spell out any technical terms in full.
-- Description: write 2-4 sentences describing what the solution should do from the client's perspective. Cover what the user needs to do, how it should work at a high level, and what the expected outcome is. Do not describe technical implementation. Write as if explaining to someone with no product knowledge.
-- Constraints: list any constraints specific to this solution only — not client-level constraints. These may come from §2.4 or the source documents. Leave blank if none apply.
-- After completing the table, cross-check every problem point in §2.1 to make sure each one is addressed by at least one solution row. Add missing rows if needed.
+- Create one row for each distinct business requirement the client is asking for, based on §2.2 Desired Outcome.
+- Each row is a requirement-level need — not a granular feature or sub-requirement. Group related actions into one row.
+- BRD ID: use the format BR-01, BR-02, BR-03 and so on, incrementing for each requirement.
+- Business Name: write a short plain English name for the requirement — no acronyms, no jargon. e.g. "Permit application management", "Attendance taking", "Solar Energy monitoring and reporting". Spell out any technical terms in full.
+- Description: write 2-4 sentences describing what the requirement should do from the client's perspective. Cover what the user needs to do, how it should work at a high level, and what the expected outcome is. Do not describe technical implementation. Write as if explaining to someone with no product knowledge.
+- Constraints: list any constraints specific to this requirement only — not client-level constraints. These may come from §2.4 or the source documents. Leave blank if none apply.
+- After completing the table, cross-check every problem point in §2.1 to make sure each one is addressed by at least one row. Add missing rows if needed.
 -->
 
-| ID | Solution Name | Description | Constraints |
+| BRD ID | Business Name | Description | Constraints |
 |---|---|---|---|
-| CR-01 | _(Short plain English name)_ | _(What the solution should do and what outcome it delivers for the client)_ | |
-| CR-02 | | | |
-| CR-03 | | | |
+| BR-01 | _(Short plain English name)_ | _(What the requirement should do and what outcome it delivers for the client)_ | |
+| BR-02 | | | |
+| BR-03 | | | |
 
 ---
 
