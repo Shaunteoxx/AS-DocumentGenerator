@@ -1,19 +1,15 @@
 steps:
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args: ['auth', 'configure-docker', 'asia-southeast1-docker.pkg.dev', '--quiet']
-
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - build
       - -t
-      - asia-southeast1-docker.pkg.dev/microapps-479605/crd-backend/image:$COMMIT_SHA
+      - gcr.io/microapps-479605/crd-backend:$COMMIT_SHA
       - ./backend
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - push
-      - asia-southeast1-docker.pkg.dev/microapps-479605/crd-backend/image:$COMMIT_SHA
+      - gcr.io/microapps-479605/crd-backend:$COMMIT_SHA
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -21,7 +17,7 @@ steps:
       - run
       - deploy
       - crd-backend
-      - --image=asia-southeast1-docker.pkg.dev/microapps-479605/crd-backend/image:$COMMIT_SHA
+      - --image=gcr.io/microapps-479605/crd-backend:$COMMIT_SHA
       - --region=asia-southeast1
       - --project=microapps-479605
       - --allow-unauthenticated
@@ -29,7 +25,4 @@ steps:
       - --set-secrets=GOOGLE_API_KEY=gemini-api-key:latest,/secrets/credentials.json=crd-credentials:latest
 
 images:
-  - asia-southeast1-docker.pkg.dev/microapps-479605/crd-backend/image:$COMMIT_SHA
-
-options:
-  logging: CLOUD_LOGGING_ONLY
+  - gcr.io/microapps-479605/crd-backend:$COMMIT_SHA
