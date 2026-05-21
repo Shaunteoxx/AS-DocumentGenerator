@@ -263,11 +263,7 @@ Respond with ONLY a JSON array of question strings, no other text. Example: ["Qu
     return {"questions": questions}
 
 
-def generate_crd_id(md: str, version: int = 1) -> str:
-    match = re.search(r'\|\s*\*{0,2}Client\s+Name\*{0,2}\s*\|\s*([^|\n]+)\|', md, re.IGNORECASE)
-    if not match:
-        return f"C-XX-{version}"
-    client_name = match.group(1).strip()
+def _name_to_crd_id(client_name: str, version: int = 1) -> str:
     words = [w for w in client_name.split() if w]
     if len(words) >= 2:
         initials = words[0][0].upper() + words[1][0].upper()
@@ -280,6 +276,29 @@ def generate_crd_id(md: str, version: int = 1) -> str:
     return f"C-{initials}-{version}"
 
 
+def generate_crd_id(md: str, version: int = 1) -> str:
+    """Derive CRD ID from a generated markdown document (table format)."""
+    match = re.search(r'\|\s*\*{0,2}Client\s+Name\*{0,2}\s*\|\s*([^|\n]+)\|', md, re.IGNORECASE)
+    if not match:
+        return f"C-XX-{version}"
+    return _name_to_crd_id(match.group(1).strip(), version)
+
+
+def extract_id_from_notes(text: str, version: int = 1) -> str:
+    """Derive CRD ID from plain-text notes or analysis before generation."""
+    patterns = [
+        r'(?:Client|Company|Account|Customer)(?:\s+Name)?\s*[:\-]\s*([^\n,\.]{2,80})',
+        r'\|\s*\*{0,2}Client\s+Name\*{0,2}\s*\|\s*([^|\n]+)\|',
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            name = m.group(1).strip().rstrip('.,')
+            if name:
+                return _name_to_crd_id(name, version)
+    return f"C-XX-{version}"
+
+
 @app.post("/generate")
 async def generate(req: GenerateRequest):
     model = get_model(load_context())
@@ -289,10 +308,10 @@ async def generate(req: GenerateRequest):
 
     filename = req.filename.strip()
 
-    # Pre-derive the ID from the analysis text before calling the model so the
+    # Pre-derive the ID from plain-text notes before calling the model so the
     # prompt injection always fires with a real value, not an empty string.
     if not filename:
-        filename = generate_crd_id(req.analysis or req.notes)
+        filename = extract_id_from_notes(req.notes + "\n" + req.analysis)
 
     filename_instruction = (
         f"\n\nThe Docs ID for this document is: {filename}. "
