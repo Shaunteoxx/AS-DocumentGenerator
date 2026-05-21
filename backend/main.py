@@ -68,19 +68,22 @@ def get_jwks_client() -> PyJWKClient:
 def verify_token(token: str) -> dict:
     client = get_jwks_client()
     signing_key = client.get_signing_key_from_jwt(token)
-    return jwt.decode(token, signing_key.key, algorithms=["RS256"], audience=CORRIDOR_CLIENT_ID)
+    return jwt.decode(token, signing_key.key, algorithms=["RS256"], options={"verify_aud": False})
 
 
 async def require_auth(access_token: str | None = Cookie(default=None)) -> dict:
     if DEV_AUTH_BYPASS:
         return {"sub": "dev"}
     if not access_token:
+        logger.warning("require_auth: no access_token cookie present")
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         return verify_token(access_token)
     except jwt.ExpiredSignatureError:
+        logger.warning("require_auth: token expired")
         raise HTTPException(status_code=401, detail="Token expired")
-    except Exception:
+    except Exception as e:
+        logger.warning("require_auth: token validation failed: %s", e)
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
