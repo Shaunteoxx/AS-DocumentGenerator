@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useGoogleLogin } from '@react-oauth/google'
 import { DownloadIcon, PencilIcon, SparklesIcon, XIcon, CloudUploadIcon } from './Icons'
-import { extractClientName } from '../utils'
+import { extractClientName, authFetch } from '../utils'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const GDOCS_TOKEN_KEY = 'google_oauth_token'
@@ -30,10 +30,9 @@ function storeToken(tokenResponse) {
 }
 
 async function doUploadToDrive(token, mdContent, fileName) {
-  const exportRes = await fetch(`${API}/export/docx`, {
+  const exportRes = await authFetch(`${API}/export/docx`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
     body: JSON.stringify({ crd: mdContent }),
   })
   if (!exportRes.ok) throw new Error(`DOCX export failed (${exportRes.status})`)
@@ -79,10 +78,9 @@ async function doUploadToDrive(token, mdContent, fileName) {
 
 async function logUploadToSheet(filename, clientName, driveLink) {
   try {
-    await fetch(`${API}/log-to-sheet`, {
+    await authFetch(`${API}/log-to-sheet`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ filename, client_name: clientName, drive_link: driveLink }),
     })
   } catch {
@@ -210,7 +208,7 @@ export default function CRDOutput({ crd, crdId, onRename }) {
     setRegenerating(true)
     setRegenError('')
     try {
-      const res = await fetch(`${API}/regenerate`, {
+      const res = await authFetch(`${API}/regenerate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ crd: draft, section: regenSection, instruction: regenInstruction }),

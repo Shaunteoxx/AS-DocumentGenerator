@@ -45,7 +45,12 @@ export default function AuthCallback({ onSuccess, onError }) {
         if (!r.ok) throw new Error('Token exchange failed')
         return r.json()
       })
-      .then(() => onSuccess?.())
+      .then(data => {
+        if (data.access_token) {
+          sessionStorage.setItem('access_token', data.access_token)
+        }
+        onSuccess?.()
+      })
       .catch(e => {
         setStatus(`Sign-in failed: ${e.message}`)
         onError?.(e.message)

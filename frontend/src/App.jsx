@@ -5,7 +5,7 @@ import CRDOutput from './components/CRDOutput'
 import CRDHistoryModal from './components/CRDHistoryModal'
 import AuthCallback from './components/AuthCallback'
 import { CheckCircleIcon, HistoryIcon, TrashIcon } from './components/Icons'
-import { extractClientName } from './utils'
+import { extractClientName, authFetch } from './utils'
 import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -63,7 +63,7 @@ export default function App() {
   useEffect(() => {
     if (window.location.pathname === '/auth/callback') return
 
-    fetch(`${API}/auth/me`, { credentials: 'include' })
+    authFetch(`${API}/auth/me`)
       .then(r => {
         if (r.ok) {
           setAuthenticated(true)
@@ -112,17 +112,16 @@ export default function App() {
       formData.append('notes', notes)
       files.forEach(f => formData.append('files', f))
 
-      const res = await fetch(`${API}/analyze`, { method: 'POST', body: formData, credentials: 'include' })
+      const res = await authFetch(`${API}/analyze`, { method: 'POST', body: formData })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
       setAnalysis(data.analysis)
       const combinedNotes = data.combined_notes || notes
       setNotes(combinedNotes)
 
-      const res2 = await fetch(`${API}/clarify`, {
+      const res2 = await authFetch(`${API}/clarify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ notes: combinedNotes, analysis: data.analysis, answers: [] }),
       })
       if (!res2.ok) throw new Error(await res2.text())
@@ -140,10 +139,9 @@ export default function App() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API}/generate`, {
+      const res = await authFetch(`${API}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ notes, analysis, answers, filename: crdId }),
       })
       if (!res.ok) throw new Error(await res.text())

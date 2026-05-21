@@ -1,5 +1,5 @@
 # CRD Generator API
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Cookie, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Cookie, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -71,14 +71,20 @@ def verify_token(token: str) -> dict:
     return jwt.decode(token, signing_key.key, algorithms=["RS256"], options={"verify_aud": False})
 
 
-async def require_auth(access_token: str | None = Cookie(default=None)) -> dict:
+async def require_auth(
+    request: Request,
+    access_token: str | None = Cookie(default=None),
+) -> dict:
     if DEV_AUTH_BYPASS:
         return {"sub": "dev"}
-    if not access_token:
-        logger.warning("require_auth: no access_token cookie present")
+    # Prefer Authorization header (Bearer token from sessionStorage)
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else access_token
+    if not token:
+        logger.warning("require_auth: no token present")
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        return verify_token(access_token)
+        return verify_token(token)
     except jwt.ExpiredSignatureError:
         logger.warning("require_auth: token expired")
         raise HTTPException(status_code=401, detail="Token expired")
@@ -246,7 +252,7 @@ async def auth_token(req: TokenExchangeRequest, response: Response):
     cookie_opts = dict(httponly=True, secure=is_secure, samesite="none" if is_secure else "lax")
     response.set_cookie("access_token", data["access_token"], max_age=data.get("expires_in", 3600), **cookie_opts)
     response.set_cookie("refresh_token", data["refresh_token"], max_age=30 * 24 * 3600, **cookie_opts)
-    return {"ok": True}
+    return {"ok": True, "access_token": data["access_token"], "expires_in": data.get("expires_in", 3600)}
 
 
 @app.post("/auth/refresh")

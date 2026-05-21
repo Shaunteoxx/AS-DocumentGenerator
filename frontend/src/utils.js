@@ -1,3 +1,19 @@
+export function getToken() {
+  return sessionStorage.getItem('access_token') || ''
+}
+
+export function authFetch(url, options = {}) {
+  const token = getToken()
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      ...options.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+}
+
 export function extractClientName(markdown) {
   const labeled = markdown.match(
     /\*?\*?(?:Client|Company|Account|Customer)(?:\s+Name)?\*?\*?\s*[:\|]\s*\**([^\n\|*]+)\**/i
