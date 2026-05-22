@@ -4,14 +4,12 @@
 
 ## Document Control
 
-| Field | Value |
-|---|---|
-| **Docs ID** | <!-- AI: Use the exact same value as the generated filename for this document. Do not generate a new ID. --> |
-| **Client Name** | <!-- AI: Extract the client company name from the source documents --> |
-| **Prepared By** | <!-- AI: Leave blank — for the team to fill in --> |
-| **Date Prepared** | <!-- AI: Use today's date in YYYY-MM-DD format --> |
-| **Status** | <!-- AI: Always set to "Draft" --> |
-| **Linked BRD** | <!-- AI: Leave blank — for the team to fill in once the BRD is created --> |
+**Docs ID:** <!-- AI: Use the exact same value as the generated filename for this document. Do not generate a new ID. -->
+**Client Name:** <!-- AI: Extract the client company name from the source documents -->
+**Prepared By:** <!-- AI: Leave blank — for the team to fill in -->
+**Date Prepared:** <!-- AI: Use today's date in YYYY-MM-DD format -->
+**Status:** <!-- AI: Always set to "Draft" -->
+**Linked BRD:** <!-- AI: Leave blank — for the team to fill in once the BRD is created -->
 
 ---
 
@@ -27,15 +25,13 @@ AI Instructions:
 - For ARR, extract only if explicitly stated. Do not estimate.
 -->
 
-| Field | Value |
-|---|---|
-| **Client Name** | |
-| **Point of Contact (POC)** | _(name and role)_ |
-| **Account Type** | Enterprise / SMB / Other |
-| **Annual Recurring Revenue (ARR)** | |
-| **Request Raised By** | _(name and role — can be same as POC)_ |
-| **Date of Request** | YYYY-MM-DD |
-| **Source** | _(list all that apply e.g. Meeting Notes, Proposal Document, Email)_ |
+**Client Name:**
+**Point of Contact (POC):** _(name and role)_
+**Account Type:** Enterprise / SMB / Other
+**Annual Recurring Revenue (ARR):**
+**Request Raised By:** _(name and role — can be same as POC)_
+**Date of Request:** YYYY-MM-DD
+**Source:** _(list all that apply e.g. Meeting Notes, Proposal Document, Email)_
 
 ---
 
@@ -106,20 +102,29 @@ Example:
 
 <!--
 AI Instructions:
-- Create one row for each distinct business requirement the client is asking for, based on §2.2 Desired Outcome.
-- Each row is a requirement-level need — not a granular feature or sub-requirement. Group related actions into one row.
+- Create one entry for each distinct business requirement the client is asking for, based on §2.2 Desired Outcome.
+- Each entry is a requirement-level need — not a granular feature or sub-requirement. Group related actions into one entry.
 - BRD ID: use the format BR-01, BR-02, BR-03 and so on, incrementing for each requirement.
 - Business Name: write a short plain English name for the requirement — no acronyms, no jargon. e.g. "Permit application management", "Attendance taking", "Solar Energy monitoring and reporting". Spell out any technical terms in full.
 - Description: write 2-4 sentences describing what the requirement should do from the client's perspective. Cover what the user needs to do, how it should work at a high level, and what the expected outcome is. Do not describe technical implementation. Write as if explaining to someone with no product knowledge.
 - Constraints: list any constraints specific to this requirement only — not client-level constraints. These may come from §2.4 or the source documents. Leave blank if none apply.
-- After completing the table, cross-check every problem point in §2.1 to make sure each one is addressed by at least one row. Add missing rows if needed.
+- After completing the list, cross-check every problem point in §2.1 to make sure each one is addressed by at least one entry. Add missing entries if needed.
 -->
 
-| BRD ID | Business Name | Description | Constraints |
-|---|---|---|---|
-| BR-01 | _(Short plain English name)_ | _(What the requirement should do and what outcome it delivers for the client)_ | |
-| BR-02 | | | |
-| BR-03 | | | |
+**BR-01**
+- **Business Name:** _(Short plain English name)_
+- **Description:** _(What the requirement should do and what outcome it delivers for the client)_
+- **Constraints:**
+
+**BR-02**
+- **Business Name:**
+- **Description:**
+- **Constraints:**
+
+**BR-03**
+- **Business Name:**
+- **Description:**
+- **Constraints:**
 
 ---
 
@@ -138,10 +143,15 @@ AI Instructions:
 
 **Direct Quotes**
 
-| Source | Reference *(timestamp / slide / page)* | Quote |
-|---|---|---|
-| | | |
-| | | |
+1.
+   - **Source:**
+   - **Reference:** _(timestamp / slide / page)_
+   - **Quote:**
+
+2.
+   - **Source:**
+   - **Reference:** _(timestamp / slide / page)_
+   - **Quote:**
 
 ---
 
@@ -174,7 +184,12 @@ AI Instructions:
 - Number each issue sequentially starting from 1.
 -->
 
-| # | Issue / Question | Raised By | Status |
-|---|---|---|---|
-| 1 | | AI-generated | Open |
-| 2 | | AI-generated | Open |
+1.
+   - **Issue / Question:**
+   - **Raised By:** AI-generated
+   - **Status:** Open
+
+2.
+   - **Issue / Question:**
+   - **Raised By:** AI-generated
+   - **Status:** Open

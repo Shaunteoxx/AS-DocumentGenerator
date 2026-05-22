@@ -1,7 +1,6 @@
 # CRD Generator API
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Cookie, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
 from pydantic import BaseModel
 from pathlib import Path
 import google.generativeai as genai
@@ -12,8 +11,6 @@ import io
 import os
 import re
 import json
-import subprocess
-import tempfile
 import logging
 import datetime
 import httpx
@@ -319,8 +316,6 @@ class GenerateRequest(BaseModel):
     filename: str = ""
 
 
-class ExportRequest(BaseModel):
-    crd: str
 
 
 class RegenerateRequest(BaseModel):
@@ -479,34 +474,6 @@ Return ONLY the complete updated Markdown document with that section rewritten. 
     )
     return {"crd": response.text}
 
-
-@app.post("/export/docx")
-async def export_docx(req: ExportRequest, _: dict = Depends(require_auth)):
-    script = Path(__file__).parent / "md_to_docx.js"
-    with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w", encoding="utf-8") as md_f:
-        md_f.write(req.crd)
-        md_path = md_f.name
-    out_path = md_path.replace(".md", ".docx")
-    try:
-        result = subprocess.run(
-            ["node", str(script), md_path, out_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=str(Path(__file__).parent),
-        )
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"DOCX generation failed: {result.stderr.strip()}")
-        with open(out_path, "rb") as f:
-            content = f.read()
-    finally:
-        Path(md_path).unlink(missing_ok=True)
-        Path(out_path).unlink(missing_ok=True)
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": "attachment; filename=crd.docx"},
-    )
 
 
 @app.post("/log-to-sheet")

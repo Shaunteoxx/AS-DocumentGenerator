@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { marked } from 'marked'
 import { useGoogleLogin } from '@react-oauth/google'
 import { DownloadIcon, PencilIcon, CloudUploadIcon, ArrowLeftIcon } from './Icons'
 import { extractClientName, authFetch } from '../utils'
@@ -8,7 +9,7 @@ import { extractClientName, authFetch } from '../utils'
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const GDOCS_TOKEN_KEY = 'google_oauth_token'
 const GDOCS_SCOPE = 'https://www.googleapis.com/auth/drive.file'
-const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const GDOC_MIME = 'application/vnd.google-apps.document'
 const CRD_FOLDER_ID = '1MTojq7o5eU6ypCb7JrXhnpo4Q34X8UzF'
 
 function getStoredToken() {
@@ -29,23 +30,18 @@ function storeToken(tokenResponse) {
 }
 
 async function doUploadToDrive(token, mdContent, fileName) {
-  const exportRes = await authFetch(`${API}/export/docx`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ crd: mdContent }),
-  })
-  if (!exportRes.ok) throw new Error(`DOCX export failed (${exportRes.status})`)
-  const docxBlob = await exportRes.blob()
+  const html = `<!DOCTYPE html><html><body>${marked.parse(mdContent)}</body></html>`
+  const htmlBlob = new Blob([html], { type: 'text/html' })
 
   const boundary = `drive_${Date.now()}`
-  const metadata = JSON.stringify({ name: fileName, parents: [CRD_FOLDER_ID] })
+  const metadata = JSON.stringify({ name: fileName, parents: [CRD_FOLDER_ID], mimeType: GDOC_MIME })
   const preamble = [
     `--${boundary}`,
     'Content-Type: application/json; charset=UTF-8',
     '',
     metadata,
     `--${boundary}`,
-    `Content-Type: ${DOCX_MIME}`,
+    'Content-Type: text/html',
     '',
     '',
   ].join('\r\n')
@@ -59,7 +55,7 @@ async function doUploadToDrive(token, mdContent, fileName) {
         Authorization: `Bearer ${token}`,
         'Content-Type': `multipart/related; boundary=${boundary}`,
       },
-      body: new Blob([preamble, docxBlob, epilogue]),
+      body: new Blob([preamble, htmlBlob, epilogue]),
     }
   )
   if (!res.ok) {
@@ -117,7 +113,7 @@ export default function CRDOutput({ crd, crdId, onRename, onBack }) {
           pendingDriveContent.current,
           pendingDriveFileName.current,
         )
-        const uploadedFilename = pendingDriveFileName.current.replace('.docx', '')
+        const uploadedFilename = pendingDriveFileName.current
         const uploadedClientName = extractClientName(pendingDriveContent.current)
         await logUploadToSheet(uploadedFilename, uploadedClientName, webViewLink)
       } catch (e) {
@@ -140,7 +136,7 @@ export default function CRDOutput({ crd, crdId, onRename, onBack }) {
   const uploadToDrive = async () => {
     setDriveLoading(true)
     setDriveError('')
-    const fileName = `${docId}.docx`
+    const fileName = docId
     const storedToken = getStoredToken()
     if (storedToken) {
       try {
@@ -164,6 +160,8 @@ export default function CRDOutput({ crd, crdId, onRename, onBack }) {
       driveLogin()
     }
   }
+
+
 
   const downloadMd = () => {
     const blob = new Blob([content], { type: 'text/markdown' })
@@ -232,7 +230,7 @@ export default function CRDOutput({ crd, crdId, onRename, onBack }) {
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <CloudUploadIcon className="w-4 h-4" />
-            {driveLoading ? 'Uploading…' : 'Upload to Google Drive'}
+            {driveLoading ? 'Uploading…' : 'Export to Google Docs'}
           </button>
         </div>
       </div>
