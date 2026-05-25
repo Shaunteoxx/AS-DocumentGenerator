@@ -81,7 +81,7 @@ HANDLING GAPS
 ───────────────────────────────────────────────────────────
 
 - If a field cannot be filled in from the source documents, leave it blank
-- Every gap must also be recorded in the Open Issues & Questions table with a neutral description of what is missing (e.g. "Annual Recurring Revenue not mentioned in source documents")
+- Every gap must also be recorded in Appendix C — Open Issues & Questions with a neutral description of what is missing (e.g. "Annual Recurring Revenue not mentioned in source documents")
 - Do not write placeholder text like "TBD" or "N/A" — either fill it in or leave it blank and flag it
 
 
@@ -98,13 +98,13 @@ DOCUMENT CONTROL
 BUSINESS REQUIREMENTS
 ───────────────────────────────────────────────────────────
 
-- Create one row per distinct business requirement the client is asking for — not per feature or action
-- Each row should represent a complete business need, not a granular sub-step
+- Create one entry per distinct business requirement the client is asking for — not per feature or action
+- Each entry should represent a complete business need, not a granular sub-step
 - Business Name: short plain English name with no acronyms or jargon — spell out technical terms in full e.g. "Permit application management" not "PTW"
 - Description: 2-4 sentences describing what the requirement should do, how it works at a high level, and what outcome it delivers for the client. Do not describe technical implementation. Write as if explaining to someone with no product knowledge.
 - Constraints: list any constraints specific to this requirement only — not client-level constraints. Leave blank if none apply.
 - Use the format BR-01, BR-02, BR-03 for BRD IDs — do not use letter suffixes
-- After completing the table, cross-check every problem point in §2.1 — every problem must be addressed by at least one requirement row. Add missing rows if needed.
+- After completing the list, cross-check every problem point in §2.1 — every problem must be addressed by at least one requirement entry. Add missing entries if needed.
 
 
 ───────────────────────────────────────────────────────────
@@ -123,14 +123,13 @@ SUPPORTING EVIDENCE
 
 - Preserve the exact original wording of every client quote — do not paraphrase
 - Include the source document name and a reference (timestamp, page, or slide number) for every quote
-- List all source documents used in the Linked Source Documents table
 
 
 ───────────────────────────────────────────────────────────
 OPEN ISSUES & QUESTIONS
 ───────────────────────────────────────────────────────────
 
-- Use this table to flag anything missing, unclear, inferred, or contradictory
+- Use Appendix C to flag anything missing, unclear, inferred, or contradictory
 - Keep the language neutral and factual
 - Number each issue sequentially starting from 1
 - Every inference made must be listed here for the team to verify
@@ -140,7 +139,7 @@ OPEN ISSUES & QUESTIONS
 INTERNAL NOTES
 ───────────────────────────────────────────────────────────
 
-- Leave §6 Internal Notes completely blank
+- Leave Appendix B — Internal Notes completely blank
 - This section is for the team to fill in manually after reviewing the AI-generated content
 
 
@@ -149,6 +148,6 @@ OUTPUT FORMAT
 ───────────────────────────────────────────────────────────
 
 - Output the completed CRD in Markdown format
-- Follow the CRD template exactly — including all section numbers, headings, and table structures
+- Follow the CRD template exactly — including all section numbers, headings, and list structures. Do not use markdown tables anywhere in the output.
 - Remove all <!-- AI Instructions --> comments from the final output
 - Do not add any commentary, explanation, or notes outside of the form structure
