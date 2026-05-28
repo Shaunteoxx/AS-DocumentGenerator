@@ -58,6 +58,8 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
   }
 
   const canAnalyze = notes.trim().length > 0 || files.length > 0
+  const charCount = notes.length
+  const charWarning = charCount > 15000 ? 'red' : charCount > 8000 ? 'yellow' : null
 
   return (
     <div className="flex flex-col items-center w-full">
@@ -93,6 +95,19 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
           placeholder={PLACEHOLDERS[activeTab]}
           className="w-full px-6 pt-6 pb-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none resize-none leading-relaxed"
         />
+
+        {charWarning && (
+          <div className={`mx-6 mb-2 px-3 py-2 rounded-lg text-xs flex items-start gap-2 ${charWarning === 'red' ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-amber-50 border border-amber-200 text-amber-700'}`}>
+            <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <span>
+              {charWarning === 'red'
+                ? `Your input is very long (${charCount.toLocaleString()} characters). The AI may produce lower quality output. Consider trimming to the most relevant content.`
+                : `Your input is getting long (${charCount.toLocaleString()} characters). This is fine, but trimming to key information may improve output quality.`}
+            </span>
+          </div>
+        )}
 
         {files.length > 0 && (
           <div className="flex flex-wrap gap-2 px-6 pb-3">

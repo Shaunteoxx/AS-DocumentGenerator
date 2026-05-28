@@ -104,6 +104,9 @@ FEATURE REQUIREMENT IDs
 
 - Derive the feature abbreviation from the feature name in the source documents
   Example: "Workflow Builder V2.0" → WB2, "Permit Module" → PM, "Report Builder" → RB
+- If the feature name has multiple words, use the first letter of each significant word: "Inspection Form Builder" → IFB
+- If the feature name is a single word, use the first 3 letters: "Reporting" → RPT
+- Never use "XX" literally in the final output — always replace it with the derived abbreviation
 - Use the format [XX-FRn] where XX is the feature abbreviation and n is a sequential number starting from 1
   Example: [WB2-FR1], [WB2-FR2], [WB2-FR3]
 - List all Feature Requirement IDs in the Proposed Solution section first, then create a full section for each one

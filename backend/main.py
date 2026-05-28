@@ -429,6 +429,7 @@ async def generate(req: GenerateRequest, _: dict = Depends(require_auth)):
         if features_text else ""
     )
 
+    today = datetime.date.today().isoformat()
     response = model.generate_content(
         f"""Generate a complete, professionally formatted CRD document following the corporate template in your context.
 
@@ -441,6 +442,7 @@ Analysis:
 Clarifying Q&A:
 {answers_text}{features_block}
 
+Today's date is {today}. Use this for the Date Prepared field.
 Produce the full CRD in Markdown format.{filename_instruction}"""
     )
 
@@ -641,6 +643,7 @@ async def ird_generate(req: GenerateRequest, _: dict = Depends(require_auth)):
         "Do not generate a new ID."
     )
 
+    today = datetime.date.today().isoformat()
     response = model.generate_content(
         f"""Generate a complete, professionally formatted IRD document following the corporate template in your context.
 
@@ -653,6 +656,7 @@ Analysis:
 Clarifying Q&A:
 {answers_text}
 
+Today's date is {today}. Use this for the Date Prepared field.
 Produce the full IRD in Markdown format.{filename_instruction}"""
     )
 
@@ -822,6 +826,7 @@ async def prd_generate(req: GenerateRequest, _: dict = Depends(require_auth)):
         "Do not generate a new ID."
     )
 
+    today = datetime.date.today().isoformat()
     response = model.generate_content(
         f"""Generate a complete, professionally formatted PRD document following the corporate template in your context.
 
@@ -834,6 +839,7 @@ Analysis:
 Clarifying Q&A:
 {answers_text}
 
+Today's date is {today}. Use this for the Date Prepared field.
 Produce the full PRD in Markdown format.{filename_instruction}"""
     )
 
