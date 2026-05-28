@@ -92,6 +92,9 @@ DOCUMENT CONTROL
 - Use the filename provided to you as the Docs ID — do not generate a new ID or use the CRD-001 format
 - Use today's date for Date Prepared in YYYY-MM-DD format
 - Leave Prepared By blank — this is for the team to fill in
+- Client Name: extract directly from the source documents — look for "Client:", "Client Name:", or any company name identified as the client. Do not leave this blank if the client name is present anywhere in the source documents.
+- Account Type: extract if mentioned; otherwise infer from context (e.g. company size, number of users) and flag as inferred in Open Issues
+- ARR: extract if explicitly stated; otherwise leave blank
 
 
 ───────────────────────────────────────────────────────────

@@ -90,6 +90,7 @@ DOCUMENT CONTROL
 - Use the filename provided to you as the Docs ID — do not generate a new ID or use the IRD-001 format
 - Use today's date for Date Prepared in YYYY-MM-DD format
 - Leave Prepared By blank — this is for the team to fill in
+- Team / Department: extract directly from the source documents — look for "Team:", "Department:", "Team / Department:", or any team or department name mentioned as the requestor. Do not leave this blank if it is present anywhere in the source documents.
 
 
 ───────────────────────────────────────────────────────────
