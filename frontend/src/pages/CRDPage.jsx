@@ -244,6 +244,7 @@ export default function CRDPage() {
   const [gapReport, setGapReport] = useState(null)
   const [gapLoading, setGapLoading] = useState(false)
   const [gapError, setGapError] = useState('')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   useEffect(() => {
     if (!CORRIDOR_CLIENT_ID) { setAuthenticated(true); setAuthLoading(false); return }
@@ -467,31 +468,46 @@ export default function CRDPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-64 border-r border-gray-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-            <HistoryIcon className="w-4 h-4 text-gray-400" />
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recent {isBrd ? 'BRDs' : 'CRDs'}</span>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {history.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-8 px-4 leading-relaxed">No documents yet.<br />Generated {isBrd ? 'BRDs' : 'CRDs'} will appear here.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {history.map(entry => (
-                  <li key={entry.id} className="group relative">
-                    <button onClick={() => isBrd ? setBrdHistoryModal(entry) : setCrdHistoryModal(entry)} className="w-full text-left px-4 py-3 pr-9 hover:bg-gray-50 transition-colors">
-                      <span className={`block text-xs font-mono font-semibold truncate ${isBrd ? 'text-violet-700' : 'text-blue-700'}`}>{isBrd ? entry.brdId : entry.crdId}</span>
-                      <span className="block text-sm font-medium text-gray-800 truncate">{isBrd ? entry.businessName : entry.clientName}</span>
-                      <span className="block text-xs text-gray-400 mt-0.5">{entry.dateGenerated}</span>
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); isBrd ? deleteBrdEntry(entry.id) : deleteCrdEntry(entry.id) }} className="absolute top-3 right-2 p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all rounded" aria-label="Delete">
-                      <TrashIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+        <aside className={`${sidebarOpen ? 'w-64' : 'w-10'} border-r border-gray-200 bg-white flex-shrink-0 flex flex-col overflow-hidden transition-all duration-200`}>
+          <div className="px-2 py-3 border-b border-gray-100 flex items-center justify-between gap-2 min-w-0">
+            {sidebarOpen && (
+              <div className="flex items-center gap-2 min-w-0">
+                <HistoryIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate">Recent {isBrd ? 'BRDs' : 'CRDs'}</span>
+              </div>
             )}
+            <button
+              onClick={() => setSidebarOpen(o => !o)}
+              className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors flex-shrink-0 ml-auto"
+              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              <svg className={`w-4 h-4 transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
           </div>
+          {sidebarOpen && (
+            <div className="flex-1 overflow-y-auto">
+              {history.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8 px-4 leading-relaxed">No documents yet.<br />Generated {isBrd ? 'BRDs' : 'CRDs'} will appear here.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {history.map(entry => (
+                    <li key={entry.id} className="group relative">
+                      <button onClick={() => isBrd ? setBrdHistoryModal(entry) : setCrdHistoryModal(entry)} className="w-full text-left px-4 py-3 pr-9 hover:bg-gray-50 transition-colors">
+                        <span className={`block text-xs font-mono font-semibold truncate ${isBrd ? 'text-violet-700' : 'text-blue-700'}`}>{isBrd ? entry.brdId : entry.crdId}</span>
+                        <span className="block text-sm font-medium text-gray-800 truncate">{isBrd ? entry.businessName : entry.clientName}</span>
+                        <span className="block text-xs text-gray-400 mt-0.5">{entry.dateGenerated}</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); isBrd ? deleteBrdEntry(entry.id) : deleteCrdEntry(entry.id) }} className="absolute top-3 right-2 p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all rounded" aria-label="Delete">
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </aside>
 
         {/* Main content */}
