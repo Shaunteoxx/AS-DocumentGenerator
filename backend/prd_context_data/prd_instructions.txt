@@ -87,6 +87,18 @@ HANDLING GAPS
 
 
 ───────────────────────────────────────────────────────────
+DOCUMENT INFO
+───────────────────────────────────────────────────────────
+
+Fill in the Document Info fields as follows:
+- Feature Name: extract directly from the source documents — look for labels like "Feature:", "Feature Name:", or a clear product/feature title
+- Product Manager: extract from source documents — look for "PM:", "Product Manager:", or a person named as PM
+- Product Owner: extract from source documents — look for "PO:", "Product Owner:", or a person named as PO
+- Target Release: extract from source documents — look for "Target Release:", "Release Date:", "Go-live:", or any stated delivery date
+- If any of these fields is not present in the source documents, leave it blank — do NOT leave it blank if the information is there, even if it is not labelled exactly as above
+
+
+───────────────────────────────────────────────────────────
 FEATURE REQUIREMENT IDs
 ───────────────────────────────────────────────────────────
 

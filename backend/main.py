@@ -818,7 +818,7 @@ async def prd_generate(req: GenerateRequest, _: dict = Depends(require_auth)):
 
     filename_instruction = (
         f"\n\nThe Docs ID for this document is: {filename}. "
-        "Use this exact value in the Docs ID field of the Document Control section. "
+        "Use this exact value in the Docs ID field of the Document Info section. "
         "Do not generate a new ID."
     )
 
