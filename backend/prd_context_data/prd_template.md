@@ -1,13 +1,31 @@
-# Product Requirement Doc (PRD)
+# [XX] - [Feature Name] PRD
+
+<!--
+AI Instructions:
+- Replace the H1 title with the format: [Feature Abbreviation] - [Feature Name] PRD
+  Example: "RB2 - Report Builder PRD", "WB2 - Workflow Builder PRD"
+- Derive the abbreviation from the feature name (e.g. "Report Builder V2.0" → RB2, "Workflow Builder V2.0" → WB2)
+- Never use "XX" literally in the final output.
+-->
 
 ---
 
 ## Document Info
 
-**Feature Name:** <!-- AI: Extract the feature or product name from the source documents -->
-**Product Manager:** <!-- AI: Extract from source documents, or leave blank -->
-**Product Owner:** <!-- AI: Extract from source documents, or leave blank -->
-**Target Release:** <!-- AI: Extract the target release date from source documents, or leave blank -->
+<!--
+AI Instructions:
+- Extract all four fields from the source documents.
+- If a field is not present, leave it blank — do not write "TBD" or "N/A".
+- Format: **Field Name:** value (inline, not as bullet points)
+-->
+
+**Feature Name:**
+
+**Product Manager:**
+
+**Product Owner:**
+
+**Target Release:**
 
 ---
 
@@ -18,13 +36,26 @@ AI Instructions:
 - Write 2–4 short paragraphs summarising what this feature is, who it is for, and what it does at a high level.
 - Cover the main functional scope without going into individual requirements.
 - Keep language plain and accessible — no jargon.
+- After the summary paragraphs, add a Prototype subsection listing any prototype or design links found in the source documents.
+- Format each link as a bold label on its own line, followed by the URL on the next line. Example:
+  **Prototype**
+  http://...
+  **Figma Design (Lo Fi)**
+  https://www.figma.com/...
+- If no prototype or design links are present, omit the Prototype subsection entirely.
 -->
 
 ---
 
 ## Problem Statement
 
-### Problem
+<!--
+AI Instructions:
+- Use bold text for subsection labels (Problem, Current State, Pain Points) — do not use H3 headings.
+- Current State label should reflect the version if known, e.g. "Current State (V1.0)".
+-->
+
+**Problem**
 
 <!--
 AI Instructions:
@@ -32,7 +63,7 @@ AI Instructions:
 - Focus on the business or user problem, not the solution.
 -->
 
-### Current State
+**Current State**
 
 <!--
 AI Instructions:
@@ -41,18 +72,18 @@ AI Instructions:
 - 2–4 sentences.
 -->
 
-### Pain Points
+**Pain Points**
 
 <!--
 AI Instructions:
-- List each distinct pain point as a separate numbered point.
+- List each distinct pain point as a separate bullet point.
 - Focus on what users or stakeholders are currently unable to do or are struggling with.
 - Each point should describe one specific issue, not a combination.
 -->
 
-1.
-2.
-3.
+-
+-
+-
 
 ---
 
@@ -60,30 +91,31 @@ AI Instructions:
 
 <!--
 AI Instructions:
-- Write 1–2 sentences summarising the overall solution approach.
-- Then list each Feature Requirement using the format [XX-FRn], where XX is the feature abbreviation derived from the feature name (e.g. "Workflow Builder V2" → WB2).
-- Number requirements sequentially from FR1.
+- Write 1–3 paragraphs summarising the overall solution scope for this PRD.
+- State what this PRD covers and what it explicitly defers to other PRDs or future versions.
+- Then list every Feature Requirement ID and title with a blank line between each entry (required for Markdown line breaks):
+  Example:
+  [RB2-FR1] Rich Text Editor Canvas
+
+  [RB2-FR2] Variable Insertion Menu (@ Menu)
+- After the FR list, include any prototype or design links again if present in the source documents.
+- Add a note about any related PRDs or future versions if mentioned in the source documents.
+- Never use "XX" literally — always replace with the derived feature abbreviation.
 -->
-
-[XX-FR1]
-[XX-FR2]
-[XX-FR3]
-
-> The detailed configuration of each individual component will be covered in separate PRDs where applicable.
 
 ---
 
-## Feature Requirements
+## [XX-FR1] Feature Requirement Title
 
 <!--
 AI Instructions:
-- Create one section per Feature Requirement listed in Proposed Solution.
-- Use the same [XX-FRn] ID and a short plain-English title for each heading.
-- For each requirement, fill in Purpose, Expected Behaviour, and Lo-Fi / Design Notes as instructed below.
-- If more than three requirements are needed, continue the pattern for FR4, FR5, etc.
+- Use H2 (##) for each Feature Requirement section — not H3.
+- Replace [XX-FR1] with the actual ID and title, e.g. "## [RB2-FR1] Rich Text Editor Canvas"
+- Repeat this section for each Feature Requirement. Number them sequentially.
+- Use bold text for subsection labels (Purpose, Expected Behaviour, Lo Fi) — do not use headings.
+- Within Expected Behaviour, use bold italic for sub-groupings (e.g. **_Triggering_**, **_Tabs_**).
+- Lo Fi: write "_(To be provided by the team)_" unless design notes or Lo Fi descriptions are present in the source documents. If present, describe them in plain text.
 -->
-
-### [XX-FR1] Feature Requirement Title
 
 **Purpose**
 
@@ -98,34 +130,35 @@ AI Instructions:
 AI Instructions:
 - Describe what the user should be able to do and how the system should respond.
 - Use bullet points for lists of actions, states, or rules.
+- Group related behaviours under bold italic sub-labels where the source document does so.
 - Keep language user-facing — do not describe implementation details.
 -->
 
-**Lo-Fi / Design Notes**
+**Lo Fi**
 
 _(To be provided by the team)_
 
 ---
 
-### [XX-FR2] Feature Requirement Title
+## [XX-FR2] Feature Requirement Title
 
 **Purpose**
 
 **Expected Behaviour**
 
-**Lo-Fi / Design Notes**
+**Lo Fi**
 
 _(To be provided by the team)_
 
 ---
 
-### [XX-FR3] Feature Requirement Title
+## [XX-FR3] Feature Requirement Title
 
 **Purpose**
 
 **Expected Behaviour**
 
-**Lo-Fi / Design Notes**
+**Lo Fi**
 
 _(To be provided by the team)_
 
@@ -135,26 +168,11 @@ _(To be provided by the team)_
 
 <!--
 AI Instructions:
-- List anything explicitly out of scope for this PRD.
-- These are items that will not be covered in this version or will be addressed in a separate PRD.
-- If no exclusions are mentioned in the source documents, leave blank and flag in Notes.
+- List anything explicitly called out as out of scope in the source documents.
+- If no exclusions are mentioned, leave the section blank.
+- Use bullet points.
 -->
 
 -
 -
 -
-
----
-
-## Notes
-
-<!--
-AI Instructions:
-- Include any additional context, open questions, or references that do not fit into any other section.
-- Preserve any action items or owner assignments mentioned in the source documents.
-- Leave blank if there is nothing to add.
--->
-
----
-
-*This document was auto-generated from unstructured source documents. All content should be reviewed and validated by the team before use.*

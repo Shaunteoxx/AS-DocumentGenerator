@@ -1,5 +1,12 @@
 # Internal Requirement Docs (IRD)
 
+<!--
+AI Instructions:
+- Replace the H1 title above with the Initiative Name extracted from the source documents.
+- Format: # [Initiative Name]
+- If the initiative name cannot be determined, use "# Internal Requirement Document".
+-->
+
 ---
 
 ## Document Control
@@ -13,11 +20,11 @@ AI Instructions:
 - Linked BRD: Leave blank — for the team to fill in once the BRD is created.
 -->
 
-**Docs ID:**
-**Domain:**
-**Prepared By:**
-**Date Prepared:**
-**Linked BRD:**
+- **Docs ID:**
+- **Domain:**
+- **Prepared By:**
+- **Date Prepared:**
+- **Linked BRD:**
 
 ---
 
@@ -29,12 +36,18 @@ AI Instructions:
 - If a field cannot be found, leave it blank and flag it in Open Issues & Questions.
 - For Initiative Raised By, include both the name and the team where possible.
 - For Source, list every type of document provided e.g. "OKR Document, Competitor Analysis, Product Audit". Do not select just one.
+- For Key Request, write a single sentence in EXACTLY this format: "[Role] requires [capability] — so that [benefit]". Do not deviate from this format.
+  - [Role]: who needs this (e.g. "Project Managers", "Operations team", "Workspace owners")
+  - [capability]: what they need (a specific feature, process, or system capability)
+  - [benefit]: the outcome or value this delivers (why it matters)
+  - Example: "Project Managers require a feature on the platform to create and manage workspaces, users, and teams — so that they can quickly complete customer set up and onboarding within a week"
 -->
 
-**Initiative Name:**
-**Initiative Raised By:** _(name and team)_
-**Date of Request:** YYYY-MM-DD
-**Source:** _(list all that apply e.g. OKR Document, Competitor Analysis, Product Audit, Roadmap Planning, Regulatory Brief)_
+- **Initiative Name:**
+- **Initiative Raised By:** _(name and team)_
+- **Date of Request:**
+- **Source:** _(list all that apply e.g. OKR Document, Competitor Analysis, Product Audit, Roadmap Planning, Regulatory Brief)_
+- **Key Request:** _([Role] requires [capability] — so that [benefit])_
 
 ---
 
@@ -142,17 +155,23 @@ AI Instructions:
 AI Instructions:
 - Extract direct quotes that support or explain the problems and requirements identified above.
 - Preserve the exact original wording of every quote — do not paraphrase.
+- For each quote, write a short title summarising what the quote is about on the numbered line itself.
+- Then fill in the Source, Reference, and Quote sub-fields below it.
 - For each quote, identify the source document and include a timestamp, slide number, or page reference where available.
+
+Example:
+1. Lack of document structure in V1.0
+   - **Source:** Product Audit Report
+   - **Reference:** Page 4
+   - **Quote:** "There is no concept of document structure; headings and paragraphs cannot be composed naturally."
 -->
 
-**Direct Quotes**
-
-1.
+1. _(short title summarising this quote)_
    - **Source:**
    - **Reference:** _(timestamp / slide / page)_
    - **Quote:**
 
-2.
+2. _(short title summarising this quote)_
    - **Source:**
    - **Reference:** _(timestamp / slide / page)_
    - **Quote:**
@@ -186,14 +205,21 @@ AI Instructions:
 - List any contradictions or unclear information found across the source documents.
 - Keep the language neutral and factual — do not speculate or suggest answers.
 - Number each issue sequentially starting from 1.
+- Write a short title describing the issue on the numbered line itself, then fill in the sub-fields below.
+
+Example:
+1. Initiative Raised By — not stated in source documents
+   - **Issue / Question:** The source documents do not name the person or team who raised this initiative.
+   - **Raised By:** AI-generated
+   - **Status:** Open
 -->
 
-1.
+1. _(short title describing this issue)_
    - **Issue / Question:**
    - **Raised By:** AI-generated
    - **Status:** Open
 
-2.
+2. _(short title describing this issue)_
    - **Issue / Question:**
    - **Raised By:** AI-generated
    - **Status:** Open

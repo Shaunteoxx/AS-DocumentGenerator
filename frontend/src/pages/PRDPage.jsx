@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import UploadArea from '../components/UploadArea'
 import ChatDisplay from '../components/ChatDisplay'
-import CRDReview from '../components/CRDReview'
-import CRDOutput from '../components/CRDOutput'
+import PRDReview from '../components/PRDReview'
+import PRDOutput from '../components/PRDOutput'
 import PRDHistoryModal from '../components/PRDHistoryModal'
 import { CheckCircleIcon, HistoryIcon, TrashIcon } from '../components/Icons'
 import { authFetch } from '../utils'
@@ -186,6 +186,10 @@ export default function PRDPage() {
               })}
             </div>
             {phase > 1 && <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600 underline">Start over</button>}
+            <button onClick={() => navigate('/graph')} className="text-xs text-zinc-400 hover:text-zinc-600 flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+              Graph
+            </button>
           </div>
         </div>
       </header>
@@ -249,9 +253,9 @@ export default function PRDPage() {
               </div>
             )}
             {phase > 1 && error && <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
-            {phase === 2 && <ChatDisplay analysis={analysis} questions={questions} onGenerate={handleGenerate} loading={loading} />}
-            {phase === 3 && <CRDReview crd={prd} onConfirm={handleConfirm} regenerateUrl="/prd/regenerate" />}
-            {phase === 4 && <CRDOutput crd={prd} crdId={prdId} onRename={handleRename} onBack={() => setPhase(3)} docLabel="PRD" logEndpoint={null} />}
+            {phase === 2 && <ChatDisplay analysis={analysis} questions={questions} onGenerate={handleGenerate} loading={loading} docLabel="PRD" />}
+            {phase === 3 && <PRDReview prd={prd} onConfirm={handleConfirm} />}
+            {phase === 4 && <PRDOutput prd={prd} prdId={prdId} onRename={handleRename} onBack={() => setPhase(3)} />}
           </div>
         </main>
       </div>

@@ -88,6 +88,36 @@ HANDLING GAPS
 
 
 ───────────────────────────────────────────────────────────
+DOCUMENT TITLE
+───────────────────────────────────────────────────────────
+
+- Use the Initiative Name as the H1 document title (replacing "# Internal Requirement Docs (IRD)")
+- Format: # [Initiative Name]
+- If the initiative name cannot be determined from the source documents, use "# Internal Requirement Document"
+
+
+───────────────────────────────────────────────────────────
+KEY REQUEST
+───────────────────────────────────────────────────────────
+
+The Key Request field captures the core user need for this initiative as a single structured sentence. It MUST follow this exact format:
+
+  "[Role] requires [capability] — so that [benefit]"
+
+Rules:
+- [Role]: the internal team or persona who needs this (e.g. "Project Managers", "Operations team", "Workspace owners and admins")
+- [capability]: a concise description of the specific feature, process, or system capability they need
+- [benefit]: the concrete outcome or value delivered — focus on speed, quality, or efficiency gains
+- Use an em dash (—) to separate the capability from the benefit, not a comma or colon
+- Write exactly one sentence — do not use bullet points or line breaks within this field
+- Do not include the placeholder text in the output; replace the entire placeholder with the completed sentence
+
+Examples:
+- "Project Managers require a feature on the platform to create and manage workspaces, users, and teams — so that they can quickly complete customer set up and onboarding within a week"
+- "Project Managers and workspace owners require a way to view the execution history and current status of active workflow instances, so that they can monitor operational progress and intervene when issues arise"
+
+
+───────────────────────────────────────────────────────────
 DOCUMENT CONTROL
 ───────────────────────────────────────────────────────────
 
@@ -96,6 +126,7 @@ DOCUMENT CONTROL
 - Leave Prepared By blank — this is for the team to fill in
 - Leave Linked BRD blank — this is for the team to fill in once the BRD is created
 - Domain: extract or infer the product domain from the source documents (e.g. Safety, Energy, Payments, Onboarding). If inferred, flag it in Open Issues.
+- Field format: each field is a bullet point starting with `- **Field Name:**` followed by the value on the same line. Do not merge multiple fields onto one line.
 
 
 ───────────────────────────────────────────────────────────
@@ -109,6 +140,14 @@ BUSINESS REQUIREMENTS
 - Description: 2–4 sentences describing what the requirement should do from an internal product perspective. Cover what the system or team needs to do, how it should work at a high level, and what the expected outcome is. Do not describe technical implementation.
 - Constraints: list constraints specific to this requirement only — not initiative-level constraints. Leave blank if none apply.
 - After completing the list, cross-check every problem point in §2.1 — every problem must be addressed by at least one requirement entry. Add missing entries if needed.
+
+
+───────────────────────────────────────────────────────────
+APPENDICES
+───────────────────────────────────────────────────────────
+
+- Appendix A (Direct Quotes): write a short title summarising each quote on the numbered line itself (e.g. "1. Lack of document structure in V1.0"), then fill in Source, Reference, and Quote below it
+- Appendix C (Open Issues): write a short title describing each issue on the numbered line itself (e.g. "1. Initiative Raised By — not stated in source documents"), then fill in the sub-fields below it
 
 
 ───────────────────────────────────────────────────────────

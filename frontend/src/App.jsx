@@ -3,6 +3,7 @@ import CRDPage from './pages/CRDPage'
 import BRDPage from './pages/BRDPage'
 import IRDPage from './pages/IRDPage'
 import PRDPage from './pages/PRDPage'
+import GraphPage from './pages/GraphPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/brd" element={<BRDPage />} />
         <Route path="/ird" element={<IRDPage />} />
         <Route path="/prd" element={<PRDPage />} />
+        <Route path="/graph" element={<GraphPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="*" element={<Navigate to="/crd" replace />} />
       </Routes>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { SendIcon } from './Icons'
 
-export default function ChatDisplay({ analysis, questions, onGenerate, loading }) {
+export default function ChatDisplay({ analysis, questions, onGenerate, loading, docLabel = 'CRD' }) {
   const [answers, setAnswers] = useState(Array(questions.length).fill(''))
   const [showAnalysis, setShowAnalysis] = useState(false)
 
@@ -23,7 +23,7 @@ export default function ChatDisplay({ analysis, questions, onGenerate, loading }
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Phase 2 — Clarifying Questions</h2>
         <p className="text-sm text-gray-500">
-          Answer each question to give the AI the context it needs to generate your CRD.
+          Answer each question to give the AI the context it needs to generate your {docLabel}.
         </p>
       </div>
 
@@ -85,12 +85,12 @@ export default function ChatDisplay({ analysis, questions, onGenerate, loading }
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            Generating CRD...
+            Generating {docLabel}...
           </span>
         ) : (
           <span className="flex items-center justify-center gap-2">
             <SendIcon className="w-4 h-4" />
-            Generate CRD
+            Generate {docLabel}
           </span>
         )}
       </button>

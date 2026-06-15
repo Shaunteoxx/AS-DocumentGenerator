@@ -13,6 +13,8 @@ import re
 import json
 import logging
 import datetime
+import time
+import asyncio
 import httpx
 import jwt
 from jwt import PyJWKClient
@@ -683,6 +685,51 @@ Return ONLY the complete updated Markdown document with that section rewritten. 
     return {"crd": response.text}
 
 
+class IrdLogToSheetRequest(BaseModel):
+    ird: str
+    filename: str
+    drive_link: str = ""
+
+
+def extract_ird_initiative_name(md: str) -> str:
+    match = re.search(r'-\s*\*\*Initiative Name:\*\*\s*([^\n]+)', md, re.IGNORECASE)
+    if match:
+        return match[1].strip()
+    heading = re.search(r'^#\s+(.+)$', md, re.MULTILINE)
+    return heading.group(1).strip() if heading else "Internal Requirement"
+
+
+def extract_ird_key_request(md: str) -> str:
+    match = re.search(r'-\s*\*\*Key Request:\*\*\s*([^\n]+)', md, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().strip('_()')
+    return ""
+
+
+@app.post("/ird/log-to-sheet")
+async def ird_log_to_sheet(req: IrdLogToSheetRequest, _: dict = Depends(require_auth)):
+    initiative_name = extract_ird_initiative_name(req.ird)
+    description = extract_ird_key_request(req.ird)
+    doc_link = f'=HYPERLINK("{req.drive_link}","{initiative_name}")' if req.drive_link else initiative_name
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
+        gc = gspread.authorize(creds)
+        ws = gc.open_by_key(SHEET_ID).get_worksheet_by_id(1456248746)
+        ws.append_row(
+            [req.filename, initiative_name, description, "", doc_link],
+            value_input_option="USER_ENTERED",
+            insert_data_option="INSERT_ROWS",
+        )
+    except Exception as exc:
+        logger.warning("IR sheet write failed in /ird/log-to-sheet (%s)", exc)
+        return {"status": "warning", "message": str(exc)}
+    return {"status": "ok"}
+
+
 # ── PRD helpers ───────────────────────────────────────────────────────────────
 
 PRD_CONTEXT_DIR = Path(__file__).parent / "prd_context_data"
@@ -705,33 +752,6 @@ Always follow the corporate context and templates below when generating document
 {context}
 --- END CORPORATE CONTEXT ---"""
     return genai.GenerativeModel(model_name=MODEL_NAME, system_instruction=system)
-
-
-def _name_to_prd_id(name: str, version: int = 1) -> str:
-    words = [w for w in name.split() if w]
-    if len(words) >= 2:
-        initials = words[0][0].upper() + words[1][0].upper()
-    elif len(words) == 1 and len(words[0]) >= 2:
-        initials = words[0][:2].upper()
-    elif len(words) == 1:
-        initials = (words[0][0] * 2).upper()
-    else:
-        return f"P-XX-{version}"
-    return f"P-{initials}-{version}"
-
-
-def extract_prd_id(text: str, version: int = 1) -> str:
-    patterns = [
-        r'(?:Product|Feature|Initiative)(?:\s+Name)?\s*[:\-]\s*([^\n,\.]{2,80})',
-        r'(?:Owner|PM|Product Manager)\s*[:\-]\s*([^\n,\.]{2,80})',
-    ]
-    for pat in patterns:
-        m = re.search(pat, text, re.IGNORECASE)
-        if m:
-            name = m.group(1).strip().rstrip('.,')
-            if name:
-                return _name_to_prd_id(name, version)
-    return f"P-XX-{version}"
 
 
 class PrdRegenerateRequest(BaseModel):
@@ -809,21 +829,17 @@ Respond with ONLY a JSON array of question strings, no other text. Example: ["Qu
     return {"questions": questions}
 
 
+def extract_prd_title(prd: str) -> str:
+    """Extract the H1 title from a generated PRD (e.g. 'FBK1 - Form Block V1.0 PRD')."""
+    m = re.search(r'^#\s+(.+)$', prd, re.MULTILINE)
+    return m.group(1).strip() if m else 'prd'
+
+
 @app.post("/prd/generate")
 async def prd_generate(req: GenerateRequest, _: dict = Depends(require_auth)):
     model = get_prd_model(load_prd_context())
     answers_text = "\n".join(
         f"Q: {a['question']}\nA: {a['answer']}" for a in req.answers
-    )
-
-    filename = req.filename.strip()
-    if not filename:
-        filename = extract_prd_id(req.notes + "\n" + req.analysis)
-
-    filename_instruction = (
-        f"\n\nThe Docs ID for this document is: {filename}. "
-        "Use this exact value in the Docs ID field of the Document Info section. "
-        "Do not generate a new ID."
     )
 
     today = datetime.date.today().isoformat()
@@ -840,10 +856,11 @@ Clarifying Q&A:
 {answers_text}
 
 Today's date is {today}. Use this for the Date Prepared field.
-Produce the full PRD in Markdown format.{filename_instruction}"""
+Produce the full PRD in Markdown format."""
     )
 
     prd = response.text
+    filename = extract_prd_title(prd)
     return {"crd": prd, "crd_id": filename}
 
 
@@ -864,6 +881,58 @@ Full PRD:
 Return ONLY the complete updated Markdown document with that section rewritten. No preamble, no explanation."""
     )
     return {"crd": response.text}
+
+
+CLICKUP_API_KEY = os.getenv("CLICKUP_API_KEY", "")
+CLICKUP_WORKSPACE_ID = "9008246823"
+CLICKUP_PRD_FOLDER_ID = "901814228652"
+
+
+def extract_prd_feature_name(md: str) -> str:
+    match = re.search(r'\*\*Feature\s+Name\*\*[:\s]+([^\n*]+)', md, re.IGNORECASE)
+    if match:
+        return match[1].strip()
+    heading = re.search(r'^#\s+(.+)$', md, re.MULTILINE)
+    return heading.group(1).strip() if heading else "Product Requirement Document"
+
+
+class PrdExportRequest(BaseModel):
+    prd: str
+    filename: str = ""
+
+
+@app.post("/prd/export-to-clickup")
+async def prd_export_to_clickup(req: PrdExportRequest, _: dict = Depends(require_auth)):
+    if not CLICKUP_API_KEY:
+        raise HTTPException(status_code=500, detail="ClickUp API key not configured")
+
+    title = req.filename.strip() or extract_prd_feature_name(req.prd)
+    headers = {"Authorization": CLICKUP_API_KEY, "Content-Type": "application/json"}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        create_res = await client.post(
+            f"https://api.clickup.com/api/v3/workspaces/{CLICKUP_WORKSPACE_ID}/docs",
+            headers=headers,
+            json={"name": title, "parent": {"id": CLICKUP_PRD_FOLDER_ID, "type": 5}},
+        )
+        if create_res.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail=f"ClickUp doc creation failed: {create_res.text}")
+
+        doc_data = create_res.json()
+        doc_id = doc_data.get("id") or (doc_data.get("doc") or {}).get("id")
+        if not doc_id:
+            raise HTTPException(status_code=502, detail="ClickUp did not return a doc ID")
+
+        page_res = await client.post(
+            f"https://api.clickup.com/api/v3/workspaces/{CLICKUP_WORKSPACE_ID}/docs/{doc_id}/pages",
+            headers=headers,
+            json={"name": title, "content": req.prd, "content_format": "text/md"},
+        )
+        if page_res.status_code not in (200, 201):
+            logger.warning("ClickUp page creation failed (%s): %s", page_res.status_code, page_res.text)
+
+    doc_url = doc_data.get("url") or f"https://app.clickup.com/{CLICKUP_WORKSPACE_ID}/v/dc/{doc_id}"
+    return {"doc_url": doc_url, "doc_id": doc_id}
 
 
 # ── BRD helpers ───────────────────────────────────────────────────────────────
@@ -1009,6 +1078,296 @@ async def fetch_brd_texts_from_drive() -> list[dict]:
         logger.warning("Drive folder fetch error: %s", exc)
 
     return results
+
+
+# ── Document graph ────────────────────────────────────────────────────────────
+
+CRD_DRIVE_FOLDER_ID = "1MTojq7o5eU6ypCb7JrXhnpo4Q34X8UzF"
+IRD_DRIVE_FOLDER_ID = "10SMxLiD4paaAtP2QFu-XAywsct9L8t-0"
+PRD_DRIVE_FOLDER_ID = "1UrlSNK_-6BOBVl9RHqRbWIEFbl_VMtju"
+
+_graph_cache: dict = {"data": None, "ts": 0.0}
+GRAPH_CACHE_TTL = 300  # seconds
+
+
+async def _fetch_folder(folder_id: str, doc_type: str) -> list[dict]:
+    """Generic version of fetch_brd_texts_from_drive for any folder."""
+    try:
+        from google.oauth2.service_account import Credentials
+        from google.auth.transport.requests import Request as GoogleAuthRequest
+        creds = Credentials.from_service_account_file(
+            str(CREDENTIALS_PATH),
+            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        )
+        creds.refresh(GoogleAuthRequest())
+        token = creds.token
+    except Exception as exc:
+        logger.warning("Drive token failed for %s: %s", doc_type, exc)
+        return []
+
+    results = []
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(
+                "https://www.googleapis.com/drive/v3/files",
+                headers={"Authorization": f"Bearer {token}"},
+                params={
+                    "q": f"'{folder_id}' in parents and trashed=false",
+                    "fields": "files(id,name,webViewLink,mimeType,modifiedTime)",
+                    "pageSize": 100,
+                },
+            )
+            for f in r.json().get("files", []):
+                file_id, mime, name = f["id"], f.get("mimeType", ""), f.get("name", "")
+                link = f.get("webViewLink", f"https://drive.google.com/file/d/{file_id}/view")
+                try:
+                    if "google-apps.document" in mime:
+                        er = await client.get(
+                            f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
+                            headers={"Authorization": f"Bearer {token}"},
+                            params={"mimeType": "text/plain"}, timeout=15,
+                        )
+                        text = er.text if er.is_success else ""
+                    else:
+                        dr = await client.get(
+                            f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
+                            headers={"Authorization": f"Bearer {token}"}, timeout=15,
+                        )
+                        text = extract_text(Path(name).suffix.lower(), dr.content) if dr.is_success else ""
+                    name_lower = name.lower()
+                    # Only filter explicit template/config files, not any doc that happens to have "template" in the name
+                    is_template = (
+                        re.search(r'(^|\s|-)template(\s|-|$)', name_lower) is not None
+                        or name_lower.endswith((".md", ".txt"))
+                        or "application/vnd.google-apps.shortcut" in mime
+                        or "application/vnd.google-apps.folder" in mime
+                    )
+                    if is_template:
+                        logger.info("Graph: skipping template/shortcut file '%s' (%s)", name, doc_type)
+                        continue
+                    results.append({"id": file_id, "name": name, "type": doc_type,
+                                    "link": link, "modified": f.get("modifiedTime", ""), "text": text[:8000]})
+                except Exception as exc:
+                    logger.warning("Failed to read %s '%s': %s", doc_type, name, exc)
+    except Exception as exc:
+        logger.warning("Folder fetch failed for %s: %s", doc_type, exc)
+    return results
+
+
+def _re_field(text: str, field: str) -> str:
+    # Match both **Field**: value (markdown) and Field: value (plain-text export)
+    m = re.search(rf'(?:\*\*{re.escape(field)}\*\*|{re.escape(field)}):?\s*([^\n\r]+)', text, re.IGNORECASE)
+    if not m:
+        return ""
+    v = re.sub(r'<!--.*?-->', '', m.group(1)).strip()
+    v = re.sub(r'^[\*_(]+|[\*_)]+$', '', v).strip()
+    if not v:
+        return ""
+    bad_starts = ('_', 'Leave blank', 'To be', '] —', '[Version', '[Feature', '[Product')
+    return "" if any(v.startswith(p) for p in bad_starts) else v
+
+
+def _drive_id_from_url(url: str) -> str:
+    m = re.search(r'/d/([a-zA-Z0-9_-]{20,})', url)
+    return m.group(1) if m else ""
+
+
+def _parse_node(raw: dict) -> dict:
+    text, t = raw["text"], raw["type"]
+    if t == "crd":
+        docs_id = _re_field(text, "Docs ID")
+        if not docs_id:
+            # Old-style CRD header: "C-XXX-v2.0-1  Client Request Document"
+            hm = re.search(r'(C-[A-Z0-9]+-[v.\d-]*\d)\s+Client Request Document', text, re.IGNORECASE)
+            docs_id = hm.group(1).strip() if hm else raw["name"]
+        title = _re_field(text, "Client Name") or raw["name"]
+        linked_brd = _re_field(text, "Linked BRD")
+        source_ref = ""
+    elif t == "ird":
+        docs_id = _re_field(text, "Docs ID") or raw["name"]
+        title = _re_field(text, "Initiative Name") or _re_field(text, "Domain") or raw["name"]
+        linked_brd = _re_field(text, "Linked BRD")
+        source_ref = ""
+    elif t == "brd":
+        m = re.search(r'^#\s+(.+)$', text, re.MULTILINE)
+        docs_id = raw["name"]
+        title = m.group(1).strip() if m else raw["name"]
+        linked_brd = ""
+        source_ref = _re_field(text, "Initial CR")
+    elif t == "prd":
+        docs_id = _re_field(text, "Docs ID") or raw["name"]
+        title = _re_field(text, "Feature Name") or raw["name"]
+        linked_brd = ""
+        source_ref = ""
+    else:
+        docs_id = title = raw["name"]
+        linked_brd = source_ref = ""
+    return {
+        "id": raw["id"], "docs_id": docs_id, "type": t, "title": title,
+        "drive_link": raw["link"], "modified": raw["modified"][:10] if raw["modified"] else "",
+        "_linked_brd": linked_brd, "_source_ref": source_ref, "_text": text,
+    }
+
+
+def _build_explicit_edges(nodes: list[dict]) -> list[dict]:
+    by_id = {n["id"]: n for n in nodes}
+    brds = [n for n in nodes if n["type"] == "brd"]
+    crds_irds = [n for n in nodes if n["type"] in ("crd", "ird")]
+    edges, seen = [], set()
+
+    def add(src, tgt, method):
+        k = (src, tgt)
+        if k not in seen and src in by_id and tgt in by_id:
+            seen.add(k)
+            edges.append({"source": src, "target": tgt, "method": method})
+
+    for n in crds_irds:
+        ref = n["_linked_brd"]
+        if not ref:
+            continue
+        drive_id = _drive_id_from_url(ref)
+        if drive_id and drive_id in by_id:
+            add(n["id"], drive_id, "explicit")
+        else:
+            for brd in brds:
+                if ref.lower() in brd["title"].lower() or ref.lower() in brd["docs_id"].lower():
+                    add(n["id"], brd["id"], "explicit")
+                    break
+
+    for brd in brds:
+        ref = brd["_source_ref"]
+        if not ref:
+            continue
+        ref_lower = ref.lower()
+        for ci in crds_irds:
+            # Use word-boundary match on docs_id to avoid false substring matches
+            # (e.g. "Gim Tian Civil Engineering" title appearing inside another CRD's description)
+            did = re.escape(ci["docs_id"].lower())
+            if re.search(rf'(?<![a-z0-9]){did}(?![a-z0-9])', ref_lower):
+                add(ci["id"], brd["id"], "explicit")
+
+    return edges
+
+
+async def _infer_edges(nodes: list[dict], explicit_edges: list[dict]) -> list[dict]:
+    already_linked = {e["source"] for e in explicit_edges}
+    unlinked_sources = [n for n in nodes if n["type"] in ("crd", "ird") and n["id"] not in already_linked]
+    brds = [n for n in nodes if n["type"] == "brd"]
+    prds = [n for n in nodes if n["type"] == "prd"]
+    valid_ids = {n["id"] for n in nodes}
+    inferred = []
+
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    def _summarise(node_list):
+        return "\n".join(
+            f'- ID: {n["id"]} | {n["type"].upper()}: {n["title"]} | {n["_text"][:400]}'
+            for n in node_list
+        )
+
+    if unlinked_sources and brds:
+        try:
+            resp = model.generate_content(
+                f"""Determine which CRD/IRD documents are related to which BRD documents based on content alignment.
+
+CRD/IRD (sources):
+{_summarise(unlinked_sources)}
+
+BRD (targets):
+{_summarise(brds)}
+
+Return ONLY JSON: {{"edges":[{{"source":"drive_id","target":"drive_id","confidence":0.9}}]}}
+Only create edges with clear content alignment. confidence 0.5–1.0. Empty array if none."""
+            )
+            m = re.search(r'\{.*\}', resp.text, re.DOTALL)
+            if m:
+                for e in json.loads(m.group()).get("edges", []):
+                    if e.get("confidence", 0) >= 0.5 and e["source"] in valid_ids and e["target"] in valid_ids:
+                        inferred.append({"source": e["source"], "target": e["target"],
+                                         "method": "inferred", "confidence": round(e["confidence"], 2)})
+        except Exception as exc:
+            logger.warning("AI inference (CRD→BRD) failed: %s", exc)
+
+    if brds and prds:
+        try:
+            resp = model.generate_content(
+                f"""Determine which BRD documents are fulfilled by which PRD documents.
+
+BRD (sources — defines business needs):
+{_summarise(brds)}
+
+PRD (targets — defines product features being built):
+{_summarise(prds)}
+
+Return ONLY JSON: {{"edges":[{{"source":"brd_drive_id","target":"prd_drive_id","confidence":0.9}}]}}
+Only create edges where the PRD clearly addresses the BRD's requirements. confidence 0.5–1.0."""
+            )
+            m = re.search(r'\{.*\}', resp.text, re.DOTALL)
+            if m:
+                for e in json.loads(m.group()).get("edges", []):
+                    if e.get("confidence", 0) >= 0.5 and e["source"] in valid_ids and e["target"] in valid_ids:
+                        inferred.append({"source": e["source"], "target": e["target"],
+                                         "method": "inferred", "confidence": round(e["confidence"], 2)})
+        except Exception as exc:
+            logger.warning("AI inference (BRD→PRD) failed: %s", exc)
+
+    return inferred
+
+
+@app.get("/graph")
+async def get_document_graph(refresh: bool = False, _: dict = Depends(require_auth)):
+    global _graph_cache
+    now = time.time()
+    if not refresh and _graph_cache["data"] and now - _graph_cache["ts"] < GRAPH_CACHE_TTL:
+        return {**_graph_cache["data"], "cached": True}
+
+    raw_all = await asyncio.gather(
+        _fetch_folder(CRD_DRIVE_FOLDER_ID, "crd"),
+        _fetch_folder(IRD_DRIVE_FOLDER_ID, "ird"),
+        _fetch_folder(BRD_DRIVE_FOLDER_ID, "brd"),
+        _fetch_folder(PRD_DRIVE_FOLDER_ID, "prd"),
+    )
+    nodes = [_parse_node(r) for batch in raw_all for r in batch]
+
+    explicit = _build_explicit_edges(nodes)
+    inferred = await _infer_edges(nodes, explicit)
+
+    clean_nodes = [{k: v for k, v in n.items() if not k.startswith("_")} for n in nodes]
+    data = {
+        "nodes": clean_nodes,
+        "edges": explicit + inferred,
+        "fetched_at": datetime.datetime.now().isoformat(),
+        "cached": False,
+    }
+    _graph_cache = {"data": data, "ts": now}
+    return data
+
+
+@app.get("/graph/debug")
+async def get_graph_debug(_: dict = Depends(require_auth)):
+    """Returns raw parsed fields for each document — useful for diagnosing missing links."""
+    raw_all = await asyncio.gather(
+        _fetch_folder(CRD_DRIVE_FOLDER_ID, "crd"),
+        _fetch_folder(IRD_DRIVE_FOLDER_ID, "ird"),
+        _fetch_folder(BRD_DRIVE_FOLDER_ID, "brd"),
+        _fetch_folder(PRD_DRIVE_FOLDER_ID, "prd"),
+    )
+    nodes = [_parse_node(r) for batch in raw_all for r in batch]
+    explicit = _build_explicit_edges(nodes)
+    debug = []
+    for n in nodes:
+        debug.append({
+            "id": n["id"],
+            "type": n["type"],
+            "name_from_drive": next((r["name"] for batch in raw_all for r in batch if r["id"] == n["id"]), ""),
+            "title": n["title"],
+            "docs_id": n["docs_id"],
+            "linked_brd_raw": n["_linked_brd"],
+            "source_ref_raw": n["_source_ref"],
+            "has_explicit_edge": any(e["source"] == n["id"] or e["target"] == n["id"] for e in explicit),
+            "text_snippet": n["_text"][:300],
+        })
+    return {"nodes": debug, "explicit_edges": explicit}
 
 
 # ── BRD endpoints ─────────────────────────────────────────────────────────────

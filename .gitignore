@@ -21,3 +21,6 @@
 
 # Claude Code local config
 .claude/
+
+# Personal handoff notes
+HANDOFF.md

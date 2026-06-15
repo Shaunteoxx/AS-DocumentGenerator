@@ -3,16 +3,22 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { marked } from 'marked'
 import { useGoogleLogin } from '@react-oauth/google'
-import { DownloadIcon, PencilIcon, CloudUploadIcon, ArrowLeftIcon } from '../Icons'
-import { authFetch } from '../../utils'
-import { extractBrdTitle } from '../../brd-utils'
-import Toast from '../Toast'
+import { DownloadIcon, PencilIcon, CloudUploadIcon, ArrowLeftIcon } from './Icons'
+import { authFetch } from '../utils'
+import Toast from './Toast'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const GDOCS_TOKEN_KEY = 'google_oauth_token'
 const GDOCS_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const GDOC_MIME = 'application/vnd.google-apps.document'
-const BRD_FOLDER_ID = '1F2_IRbCAwltGPI1i4UaSgpGDtjVxWsfx'
+const IRD_FOLDER_ID = '10SMxLiD4paaAtP2QFu-XAywsct9L8t-0'
+
+function extractInternalName(md) {
+  const match = md.match(/\*\*(?:Initiative\s+Name|Team\s*\/\s*Department)\*\*[:\s]+([^\n*]+)/i)
+  if (match) return match[1].trim()
+  const heading = md.match(/^#\s+(.+)$/m)
+  return heading ? heading[1].trim() : 'Internal Requirement'
+}
 
 function getStoredToken() {
   try {
@@ -36,7 +42,7 @@ async function doUploadToDrive(token, mdContent, fileName) {
   const htmlBlob = new Blob([html], { type: 'text/html' })
 
   const boundary = `drive_${Date.now()}`
-  const metadata = JSON.stringify({ name: fileName, parents: [BRD_FOLDER_ID], mimeType: GDOC_MIME })
+  const metadata = JSON.stringify({ name: fileName, parents: [IRD_FOLDER_ID], mimeType: GDOC_MIME })
   const preamble = [
     `--${boundary}`,
     'Content-Type: application/json; charset=UTF-8',
@@ -73,27 +79,27 @@ async function doUploadToDrive(token, mdContent, fileName) {
   return webViewLink
 }
 
-async function logBrdUpload(brd, driveLink) {
+async function logToSheet(filename, ird, driveLink) {
   try {
-    await authFetch(`${API}/brd/log-to-sheet`, {
+    await authFetch(`${API}/ird/log-to-sheet`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brd, drive_link: driveLink }),
+      body: JSON.stringify({ filename, ird, drive_link: driveLink }),
     })
   } catch {
     // sheet logging is best-effort; upload already succeeded
   }
 }
 
-export default function BRDOutput({ brd, brdId, onRename, onBack }) {
-  const content = brd
+export default function IRDOutput({ ird, irdId, onRename, onBack }) {
+  const content = ird
 
-  const [docId, setDocId] = useState(brdId || 'brd')
+  const [docId, setDocId] = useState(irdId || 'ird')
   const [idEditing, setIdEditing] = useState(false)
   const [idDraft, setIdDraft] = useState('')
 
   const saveId = () => {
-    const newId = idDraft.trim() || brdId || 'brd'
+    const newId = idDraft.trim() || irdId || 'ird'
     setDocId(newId)
     setIdEditing(false)
     onRename?.(newId)
@@ -116,8 +122,12 @@ export default function BRDOutput({ brd, brdId, onRename, onBack }) {
           pendingDriveContent.current,
           pendingDriveFileName.current,
         )
-        await logBrdUpload(pendingDriveContent.current, webViewLink)
-        setToast({ message: 'BRD uploaded to Google Drive · Row added to Sheets', link: webViewLink, linkLabel: 'Open Doc' })
+        await logToSheet(
+          pendingDriveFileName.current,
+          pendingDriveContent.current,
+          webViewLink,
+        )
+        setToast({ message: 'IRD uploaded to Google Drive · Row added to Sheets', link: webViewLink, linkLabel: 'Open Doc' })
       } catch (e) {
         setDriveError(e.message)
       } finally {
@@ -138,13 +148,13 @@ export default function BRDOutput({ brd, brdId, onRename, onBack }) {
   const uploadToDrive = async () => {
     setDriveLoading(true)
     setDriveError('')
-    const fileName = docId
+    const fileName = extractInternalName(content)
     const storedToken = getStoredToken()
     if (storedToken) {
       try {
         const webViewLink = await doUploadToDrive(storedToken, content, fileName)
-        await logBrdUpload(content, webViewLink)
-        setToast({ message: 'BRD uploaded to Google Drive · Row added to Sheets', link: webViewLink, linkLabel: 'Open Doc' })
+        await logToSheet(docId, content, webViewLink)
+        setToast({ message: 'IRD uploaded to Google Drive · Row added to Sheets', link: webViewLink, linkLabel: 'Open Doc' })
         setDriveLoading(false)
       } catch (e) {
         if (e.status === 401 || e.status === 403) {
@@ -159,7 +169,7 @@ export default function BRDOutput({ brd, brdId, onRename, onBack }) {
       }
     } else {
       pendingDriveContent.current = content
-      pendingDriveFileName.current = fileName
+      pendingDriveFileName.current = extractInternalName(content)
       driveLogin()
     }
   }
@@ -178,7 +188,7 @@ export default function BRDOutput({ brd, brdId, onRename, onBack }) {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Phase 4 — Export BRD</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Phase 4 — Export IRD</h2>
           <div className="flex items-center gap-2">
             {idEditing ? (
               <input
@@ -192,13 +202,13 @@ export default function BRDOutput({ brd, brdId, onRename, onBack }) {
                   if (e.key === 'Enter') saveId()
                   if (e.key === 'Escape') cancelId()
                 }}
-                className="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-violet-50 text-violet-700 border border-violet-400 outline-none focus:ring-1 focus:ring-violet-400 focus:ring-offset-0"
+                className="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-400 outline-none focus:ring-1 focus:ring-emerald-400 focus:ring-offset-0"
               />
             ) : (
               <span
                 onClick={() => { setIdDraft(docId); setIdEditing(true) }}
                 title="Click to rename"
-                className="group inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-semibold bg-violet-50 text-violet-700 border border-violet-200 cursor-pointer hover:border-violet-400 hover:bg-violet-100 transition-colors select-none"
+                className="group inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer hover:border-emerald-400 hover:bg-emerald-100 transition-colors select-none"
               >
                 {docId}
                 <PencilIcon className="w-2.5 h-2.5 opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0" />
@@ -250,7 +260,7 @@ export default function BRDOutput({ brd, brdId, onRename, onBack }) {
       )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-8 max-h-[70vh] overflow-y-auto">
-        <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base">
+        <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-table:text-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
         </div>
       </div>

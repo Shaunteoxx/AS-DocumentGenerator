@@ -5,6 +5,7 @@ import { marked } from 'marked'
 import { useGoogleLogin } from '@react-oauth/google'
 import { DownloadIcon, PencilIcon, CloudUploadIcon, ArrowLeftIcon } from './Icons'
 import { extractClientName, authFetch } from '../utils'
+import Toast from './Toast'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const GDOCS_TOKEN_KEY = 'google_oauth_token'
@@ -103,6 +104,7 @@ export default function CRDOutput({ crd, crdId, onRename, onBack, folderId = CRD
 
   const [driveLoading, setDriveLoading] = useState(false)
   const [driveError, setDriveError] = useState('')
+  const [toast, setToast] = useState(null)
   const pendingDriveContent = useRef(null)
   const pendingDriveFileName = useRef(null)
 
@@ -119,6 +121,7 @@ export default function CRDOutput({ crd, crdId, onRename, onBack, folderId = CRD
         const uploadedFilename = pendingDriveFileName.current
         const uploadedClientName = extractClientName(pendingDriveContent.current)
         await logUploadToSheet(uploadedFilename, uploadedClientName, webViewLink, logEndpoint)
+        setToast({ message: `${docLabel} uploaded to Google Drive · Row added to Sheets`, link: webViewLink, linkLabel: 'Open Doc' })
       } catch (e) {
         setDriveError(e.message)
       } finally {
@@ -145,6 +148,7 @@ export default function CRDOutput({ crd, crdId, onRename, onBack, folderId = CRD
       try {
         const webViewLink = await doUploadToDrive(storedToken, content, fileName, folderId)
         await logUploadToSheet(docId, extractClientName(content), webViewLink, logEndpoint)
+        setToast({ message: `${docLabel} uploaded to Google Drive · Row added to Sheets`, link: webViewLink, linkLabel: 'Open Doc' })
         setDriveLoading(false)
       } catch (e) {
         if (e.status === 401 || e.status === 403) {
@@ -240,6 +244,15 @@ export default function CRDOutput({ crd, crdId, onRename, onBack, folderId = CRD
 
       {driveError && (
         <p className="text-sm text-red-600">{driveError}</p>
+      )}
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          link={toast.link}
+          linkLabel={toast.linkLabel}
+          onDismiss={() => setToast(null)}
+        />
       )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-8 max-h-[70vh] overflow-y-auto">
