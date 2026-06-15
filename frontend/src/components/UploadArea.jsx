@@ -93,7 +93,7 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
           onChange={(e) => setNotes(e.target.value)}
           rows={9}
           placeholder={PLACEHOLDERS[activeTab]}
-          className="w-full px-6 pt-6 pb-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none resize-none leading-relaxed"
+          className="w-full px-6 pt-6 pb-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-900/15 rounded-t-2xl resize-none leading-relaxed"
         />
 
         {charWarning && (

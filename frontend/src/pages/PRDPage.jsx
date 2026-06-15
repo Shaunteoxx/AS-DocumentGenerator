@@ -253,7 +253,7 @@ export default function PRDPage() {
               </div>
             )}
             {phase > 1 && error && <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
-            {phase === 2 && <ChatDisplay analysis={analysis} questions={questions} onGenerate={handleGenerate} loading={loading} docLabel="PRD" />}
+            {phase === 2 && <ChatDisplay analysis={analysis} questions={questions} onGenerate={handleGenerate} loading={loading} docLabel="PRD" accent="orange" />}
             {phase === 3 && <PRDReview prd={prd} onConfirm={handleConfirm} />}
             {phase === 4 && <PRDOutput prd={prd} prdId={prdId} onRename={handleRename} onBack={() => setPhase(3)} />}
           </div>

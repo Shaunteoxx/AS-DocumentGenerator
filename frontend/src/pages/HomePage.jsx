@@ -96,7 +96,7 @@ export default function HomePage() {
               <button
                 key={tool.route}
                 onClick={() => navigate(tool.route)}
-                className={`group text-left bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm transition-all duration-150 hover:shadow-md ${ac.hover} focus:outline-none`}
+                className={`group text-left bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm transition-all duration-150 hover:shadow-md ${ac.hover} focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2`}
               >
                 <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded border mb-4 ${ac.abbr}`}>
                   {tool.abbr}

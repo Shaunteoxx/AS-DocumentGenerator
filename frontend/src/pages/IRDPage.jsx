@@ -253,7 +253,7 @@ export default function IRDPage() {
               </div>
             )}
             {phase > 1 && error && <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
-            {phase === 2 && <ChatDisplay analysis={analysis} questions={questions} onGenerate={handleGenerate} loading={loading} docLabel="IRD" />}
+            {phase === 2 && <ChatDisplay analysis={analysis} questions={questions} onGenerate={handleGenerate} loading={loading} docLabel="IRD" accent="emerald" />}
             {phase === 3 && <IRDReview ird={ird} onConfirm={handleConfirm} />}
             {phase === 4 && <IRDOutput ird={ird} irdId={irdId} onRename={handleRename} onBack={() => setPhase(3)} />}
           </div>

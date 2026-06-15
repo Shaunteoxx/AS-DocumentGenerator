@@ -36,7 +36,7 @@ function NodeCard({ node, highlighted, dimmed, onHover, cardRef }) {
         <p className="text-[10px] text-gray-400 font-mono truncate mt-0.5 pl-[38px]">{node.docs_id}</p>
       )}
       {node.modified && (
-        <p className="text-[10px] text-gray-300 mt-0.5 pl-[38px]">{node.modified}</p>
+        <p className="text-[10px] text-gray-400 mt-0.5 pl-[38px]">{node.modified}</p>
       )}
     </div>
   )
@@ -46,7 +46,7 @@ function Column({ title, nodes, highlighted, dimmed, onHover, refs }) {
   if (nodes.length === 0) return (
     <div className="flex-1 min-w-0">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{title}</p>
-      <p className="text-xs text-gray-300 italic">No documents</p>
+      <p className="text-xs text-gray-400 italic">No documents</p>
     </div>
   )
   return (
@@ -272,7 +272,7 @@ export default function GraphPage() {
                     />
                   )}
                   {crds.length === 0 && irds.length === 0 && (
-                    <p className="text-xs text-gray-300 italic">No CRD or IRD documents</p>
+                    <p className="text-xs text-gray-400 italic">No CRD or IRD documents</p>
                   )}
                 </div>
 

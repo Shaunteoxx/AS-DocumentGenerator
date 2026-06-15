@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import { SendIcon } from './Icons'
 
-export default function ChatDisplay({ analysis, questions, onGenerate, loading, docLabel = 'CRD' }) {
+const ACCENTS = {
+  blue:    { badge: 'bg-blue-100 text-blue-700',       ring: 'focus:ring-blue-500',    btn: 'bg-blue-600 hover:bg-blue-700' },
+  violet:  { badge: 'bg-violet-100 text-violet-700',   ring: 'focus:ring-violet-500',  btn: 'bg-violet-600 hover:bg-violet-700' },
+  emerald: { badge: 'bg-emerald-100 text-emerald-700', ring: 'focus:ring-emerald-500', btn: 'bg-emerald-600 hover:bg-emerald-700' },
+  orange:  { badge: 'bg-orange-100 text-orange-700',   ring: 'focus:ring-orange-500',  btn: 'bg-orange-600 hover:bg-orange-700' },
+}
+
+export default function ChatDisplay({ analysis, questions, onGenerate, loading, docLabel = 'CRD', accent = 'blue' }) {
+  const ac = ACCENTS[accent] || ACCENTS.blue
   const [answers, setAnswers] = useState(Array(questions.length).fill(''))
   const [showAnalysis, setShowAnalysis] = useState(false)
 
@@ -52,7 +60,7 @@ export default function ChatDisplay({ analysis, questions, onGenerate, loading, 
         {questions.map((q, i) => (
           <div key={i} className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex gap-3">
-              <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">
+              <div className={`w-6 h-6 rounded-full ${ac.badge} flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5`}>
                 {i + 1}
               </div>
               <div className="flex-1 space-y-3">
@@ -62,7 +70,7 @@ export default function ChatDisplay({ analysis, questions, onGenerate, loading, 
                   onChange={(e) => setAnswer(i, e.target.value)}
                   rows={3}
                   placeholder="Your answer..."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 ${ac.ring} focus:border-transparent resize-none`}
                 />
               </div>
             </div>
@@ -77,7 +85,7 @@ export default function ChatDisplay({ analysis, questions, onGenerate, loading, 
       <button
         onClick={handleSubmit}
         disabled={!allAnswered || loading}
-        className="w-full py-3 px-6 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className={`w-full py-3 px-6 ${ac.btn} text-white rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
       >
         {loading ? (
           <span className="flex items-center justify-center gap-2">
