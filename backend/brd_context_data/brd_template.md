@@ -1,6 +1,6 @@
 <!--
 ==================================================================
-BRD TEMPLATE  (v2)
+BRD TEMPLATE
 AI: Read this whole header before writing anything.
 
 PLATFORM MODEL — use these terms exactly; never invent others:
