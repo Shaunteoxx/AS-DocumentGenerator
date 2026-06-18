@@ -71,6 +71,13 @@ Each doc type has its own route and context data folder:
 - Uses Google Sheets (gspread) to log generated documents
 - Auth gate on all API routes via Corridor (Bearer token)
 
+### BRD corpus fetch (match phase)
+- `/brd/analyze` compares the incoming CRD against every existing BRD in the BRD Drive folder via `fetch_brd_texts_from_drive()`
+- The corpus is **cached in-memory for 5 min** (`_brd_corpus_cache` / `BRD_CORPUS_CACHE_TTL`) and downloads run **concurrently** (`asyncio.gather` in `_fetch_one_brd`) — repeat generations skip the Drive round-trips
+- Template/config files (name contains "template", `.md`/`.txt`, shortcuts/folders) are filtered out so the AI only matches against real BRDs
+- `POST /brd/refresh-corpus` force-refetches the corpus (`refresh=True`), bypassing the cache — exposed in the UI as the **"Refresh BRDs cache from Drive"** button on the BRD upload screen
+- Cache is per-process; with multiple uvicorn workers each holds its own cache
+
 ### Running the backend
 ```bash
 cd backend
@@ -123,7 +130,50 @@ CORRIDOR_BASE_URL=https://www.corridor.cloud
 CORRIDOR_CLIENT_ID=your_client_id
 CORRIDOR_CLOUD_API_KEY=your_api_key
 CORRIDOR_REDIRECT_URI=your_redirect_uri
+CLICKUP_API_KEY=pk_...                     # PRD export to ClickUp
 ```
+
+> Note: `CLICKUP_API_KEY` is set locally in `backend/.env` but is **not** yet wired into `cloudbuild.yaml` as a Cloud Run secret — PRD ClickUp export will fail in production until it's added to the deploy config.
+
+## Integrations Reference
+
+### Google Drive folders
+Each doc type reads/writes its own Drive folder (used for export and, for BRD, the match phase).
+
+| Doc Type | Folder ID |
+|----------|-----------|
+| CRD | `1MTojq7o5eU6ypCb7JrXhnpo4Q34X8UzF` |
+| BRD | `1F2_IRbCAwltGPI1i4UaSgpGDtjVxWsfx` |
+| IRD | `10SMxLiD4paaAtP2QFu-XAywsct9L8t-0` |
+| PRD | N/A — uses ClickUp instead |
+
+### Google Sheets logging
+Generated docs are logged to a spreadsheet (`gspread`, service account).
+
+**Spreadsheet ID:** `1JOsrTwUMpJ9cKKXgAAdSZRd_mJquhajAAvnIsk6B__I`
+
+| Doc Type | Worksheet | Columns |
+|----------|-----------|---------|
+| CRD | "CR" | filename, client_name, "", drive_link, date, "", "", "" |
+| BRD | "BR" | br_id, title, objective, crds, date, drive_link |
+| IRD | GID `1456248746` | ID, Internal Request, Key Request Description, Input Folder (empty), IRD Document (HYPERLINK formula) |
+
+The IRD sheet uses `get_worksheet_by_id(1456248746)` because the tab name is unknown.
+
+### ClickUp (PRD export)
+PRD does not export to Google Docs — it creates a ClickUp Doc instead.
+
+- **Workspace ID:** `9008246823`
+- **PRD Folder ID:** `901814228652` (type 5 = folder) — `https://app.clickup.com/9008246823/v/f/901814228652`
+- **API:** ClickUp v3 Docs API
+- **Flow:** frontend POSTs `{ prd, filename }` → backend creates ClickUp Doc in the PRD folder → returns `doc_url` → frontend opens it
+- **Filename:** extracted from the PRD H1 title after generation (e.g. "FBK1 - Form Block V1.0 PRD")
+- **Deletion:** ClickUp v3 Docs API returns 405 on DELETE — docs must be deleted manually from the UI
+
+## Deployment
+- **Backend:** redeploys via Cloud Build on push (Cloud Run, `asia-southeast1`). Live at `https://crd-backend-758003905280.asia-southeast1.run.app`. Context-data (`*_context_data/`) and prompt changes only take effect after the backend redeploys.
+- **Frontend:** deploys via Vercel.
+- `gcloud` CLI needs `gcloud auth login` before reading Cloud Run logs.
 
 ## Key Conventions
 - Never hardcode API keys; always use environment variables
