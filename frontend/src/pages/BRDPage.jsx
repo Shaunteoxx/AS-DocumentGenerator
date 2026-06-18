@@ -508,6 +508,8 @@ export default function BRDPage() {
   const [activeGapReq, setActiveGapReq] = useState(null)
   const [gapReport, setGapReport] = useState(null)
   const [gapLoading, setGapLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
   const [gapError, setGapError] = useState('')
 
   useEffect(() => {
@@ -541,6 +543,22 @@ export default function BRDPage() {
         <p className="text-sm text-gray-500">Signing in…</p>
       </div>
     )
+  }
+
+  const handleRefreshCorpus = async () => {
+    setRefreshing(true)
+    setRefreshMsg('')
+    setError('')
+    try {
+      const res = await authFetch(`${API}/brd/refresh-corpus`, { method: 'POST' })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      setRefreshMsg(`Loaded ${data.count} BRD${data.count === 1 ? '' : 's'} from Drive`)
+    } catch (e) {
+      setError(`Refresh failed: ${e.message}`)
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   const handleAnalyze = async () => {
@@ -894,6 +912,20 @@ export default function BRDPage() {
               <div className="w-full max-w-3xl">
                 {error && <div className="mb-4 p-4 bg-red-900/40 border border-red-500/40 rounded-lg text-red-300 text-sm">{error}</div>}
                 <UploadArea notes={notes} setNotes={setNotes} files={files} setFiles={setFiles} onAnalyze={handleAnalyze} loading={loading} activeTab="Business Requirement" onTabChange={handleTabChange} />
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    onClick={handleRefreshCorpus}
+                    disabled={refreshing}
+                    className="text-xs font-medium text-zinc-500 hover:text-violet-700 disabled:opacity-50 flex items-center gap-1.5"
+                    title="Re-read the latest BRDs from Google Drive so the AI matches against the newest documents"
+                  >
+                    <svg className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {refreshing ? 'Refreshing BRDs…' : 'Refresh BRDs cache from Drive'}
+                  </button>
+                  {refreshMsg && <span className="text-xs text-emerald-600">{refreshMsg}</span>}
+                </div>
               </div>
             )}
             {(phase > 1 || showMatchPhase) && error && (

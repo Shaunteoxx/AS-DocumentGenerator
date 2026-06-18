@@ -1021,8 +1021,51 @@ class BrdLogToSheetRequest(BaseModel):
 BRD_DRIVE_FOLDER_ID = "1F2_IRbCAwltGPI1i4UaSgpGDtjVxWsfx"
 
 
-async def fetch_brd_texts_from_drive() -> list[dict]:
-    """Return [{name, id, link, text}] for every BRD in the Drive folder."""
+_brd_corpus_cache: dict = {"data": None, "ts": 0.0}
+BRD_CORPUS_CACHE_TTL = 300  # seconds
+
+
+async def _fetch_one_brd(client: httpx.AsyncClient, token: str, f: dict) -> dict | None:
+    """Download and extract the text of a single Drive BRD file."""
+    file_id = f["id"]
+    mime = f.get("mimeType", "")
+    name = f.get("name", "")
+    link = f.get("webViewLink", f"https://drive.google.com/file/d/{file_id}/view")
+    try:
+        if "google-apps.document" in mime:
+            er = await client.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"mimeType": "text/plain"},
+                timeout=15,
+            )
+            text = er.text if er.is_success else ""
+        else:
+            dr = await client.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=15,
+            )
+            text = extract_text(Path(name).suffix.lower(), dr.content) if dr.is_success else ""
+
+        if text.strip():
+            return {"name": name, "id": file_id, "link": link, "text": text[:10000]}
+    except Exception as exc:
+        logger.warning("Failed to fetch BRD '%s': %s", name, exc)
+    return None
+
+
+async def fetch_brd_texts_from_drive(refresh: bool = False) -> list[dict]:
+    """Return [{name, id, link, text}] for every BRD in the Drive folder.
+
+    Results are cached for BRD_CORPUS_CACHE_TTL seconds since the BRD corpus
+    rarely changes between generations; downloads run concurrently.
+    """
+    now = time.time()
+    if not refresh and _brd_corpus_cache["data"] is not None \
+            and now - _brd_corpus_cache["ts"] < BRD_CORPUS_CACHE_TTL:
+        return _brd_corpus_cache["data"]
+
     try:
         from google.oauth2.service_account import Credentials
         from google.auth.transport.requests import Request as GoogleAuthRequest
@@ -1051,35 +1094,16 @@ async def fetch_brd_texts_from_drive() -> list[dict]:
                 logger.warning("Drive file list failed: %s", r.text)
                 return []
 
-            for f in r.json().get("files", []):
-                file_id = f["id"]
-                mime = f.get("mimeType", "")
-                name = f.get("name", "")
-                link = f.get("webViewLink", f"https://drive.google.com/file/d/{file_id}/view")
-                try:
-                    if "google-apps.document" in mime:
-                        er = await client.get(
-                            f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
-                            headers={"Authorization": f"Bearer {token}"},
-                            params={"mimeType": "text/plain"},
-                            timeout=15,
-                        )
-                        text = er.text if er.is_success else ""
-                    else:
-                        dr = await client.get(
-                            f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
-                            headers={"Authorization": f"Bearer {token}"},
-                            timeout=15,
-                        )
-                        text = extract_text(Path(name).suffix.lower(), dr.content) if dr.is_success else ""
-
-                    if text.strip():
-                        results.append({"name": name, "id": file_id, "link": link, "text": text[:10000]})
-                except Exception as exc:
-                    logger.warning("Failed to fetch BRD '%s': %s", name, exc)
+            fetched = await asyncio.gather(
+                *(_fetch_one_brd(client, token, f) for f in r.json().get("files", []))
+            )
+            results = [b for b in fetched if b is not None]
     except Exception as exc:
         logger.warning("Drive folder fetch error: %s", exc)
+        return _brd_corpus_cache["data"] or []
 
+    _brd_corpus_cache["data"] = results
+    _brd_corpus_cache["ts"] = now
     return results
 
 
@@ -1374,6 +1398,13 @@ async def get_graph_debug(_: dict = Depends(require_auth)):
 
 
 # ── BRD endpoints ─────────────────────────────────────────────────────────────
+
+@app.post("/brd/refresh-corpus")
+async def brd_refresh_corpus(_: dict = Depends(require_auth)):
+    """Force a re-fetch of the BRD corpus from Drive, bypassing the TTL cache."""
+    brds = await fetch_brd_texts_from_drive(refresh=True)
+    return {"count": len(brds), "names": [b["name"] for b in brds]}
+
 
 @app.post("/brd/analyze")
 async def brd_analyze(
