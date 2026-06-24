@@ -21,6 +21,8 @@ AS-CRD/
 │       │   ├── IRDPage.jsx
 │       │   ├── PRDPage.jsx
 │       │   ├── GraphPage.jsx       # document relationship graph
+│       │   ├── DocsPage.jsx        # Document Review Hub — library of Drive docs
+│       │   ├── DocViewerPage.jsx   # per-section comment & AI regenerate
 │       │   ├── HomePage.jsx
 │       │   └── AuthCallbackPage.jsx
 │       └── components/
@@ -67,7 +69,8 @@ Each doc type has its own route and context data folder:
 ### API
 - Built with FastAPI
 - Calls the **Google Gemini API** (`gemini-2.5-flash`) for all document generation and AI inference
-- Uses Google Drive API (service account) to read/export documents for the graph feature
+- Uses Google Drive API (service account) to read/export documents for the graph feature and the Document Review Hub
+- Uses the Google Docs API (service account) to surgically edit document sections in place (Review Hub write-back)
 - Uses Google Sheets (gspread) to log generated documents
 - Auth gate on all API routes via Corridor (Bearer token)
 
@@ -77,6 +80,17 @@ Each doc type has its own route and context data folder:
 - Template/config files (name contains "template", `.md`/`.txt`, shortcuts/folders) are filtered out so the AI only matches against real BRDs
 - `POST /brd/refresh-corpus` force-refetches the corpus (`refresh=True`), bypassing the cache — exposed in the UI as the **"Refresh BRDs cache from Drive"** button on the BRD upload screen
 - Cache is per-process; with multiple uvicorn workers each holds its own cache
+
+### Document Review Hub (`/docs`)
+A library + editor for documents already in Drive — browse, then comment on a single section and have the AI rewrite just that section, saving back to the same Drive file.
+
+- `GET /documents` — lists all Google Docs from the CRD/BRD/IRD Drive folders (templates/shortcuts filtered out)
+- `GET /documents/{id}/content` — exports the Google Doc as **DOCX** and converts it to Markdown via `_docx_to_markdown()`. DOCX (not HTML) is used because it reliably preserves `Heading 1/2/3` styles and bullet lists across all doc types; HTML export flattens headings to bold text for docs that were originally uploaded as HTML.
+- `POST /documents/{id}/regenerate-section` — regenerates one section and writes it back **in place** via `_replace_doc_section()` (Google Docs API `batchUpdate`): it locates the section by heading text, deletes only that range, and re-inserts the new content with heading styles, bullets, and bold re-applied. Every other section keeps its original formatting. Falls back to a full-document re-upload (`_update_drive_doc`) only if the section heading can't be located.
+- The regenerate prompt directs the model to follow the **template's** heading levels / bullet formatting for the rewritten section.
+- **Section splitting** (`_parse_sections`, and `parseSections` in the React review components + DocViewerPage) breaks on **H1, H2 and H3** — each `### BR-0N` requirement becomes its own card.
+- **Requires real heading styles:** surgical replace finds section boundaries by matching heading text, so it works best on docs whose section titles are actual `Heading 2/3` styles. Docs where titles are bold-normal text fall back to full re-upload.
+- **Write-back auth:** the service account must have **Editor** access on the CRD/BRD/IRD Drive folders (`_get_drive_token(readonly=False)` → `auth/drive` scope, which also authorizes the Docs API). The service account cannot *create* files (no Drive storage quota) — new docs are still created by the frontend via the user's OAuth token.
 
 ### Running the backend
 ```bash
