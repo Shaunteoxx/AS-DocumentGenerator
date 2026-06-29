@@ -2126,9 +2126,20 @@ async def _replace_doc_section(doc_id: str, section_heading: str, next_heading: 
                 if p["text"] == nh:
                     section_end = p["start"]
                     break
-        is_last = section_end is None
-        if is_last:
-            section_end = body_end - 1  # keep the document's final newline
+            if section_end is None:
+                # The next heading was expected but couldn't be located in the live
+                # doc. Treating this as the "last section" would delete everything
+                # from here to the end of the document, so bail and let the caller
+                # fall back to a safe full re-upload instead of losing content.
+                logger.warning(
+                    "next_heading %r not found in doc %s — aborting surgical replace to avoid data loss",
+                    next_heading, doc_id,
+                )
+                return False
+            is_last = False
+        else:
+            is_last = True
+            section_end = body_end - 1  # genuinely the last section; keep final newline
 
         blocks = _parse_markdown_blocks(new_section_md)
         if not blocks:
@@ -2192,30 +2203,47 @@ async def regenerate_doc_section(doc_id: str, req: DocRegenerateRequest, _: dict
     instruction_line = f"\nAdditional instructions: {req.instruction.strip()}" if req.instruction.strip() else ""
 
     response = model.generate_content(
-        f"""You are given a complete document in Markdown format. Rewrite ONLY the section named below. Do not alter any other section, heading, or content.
+        f"""You are given a complete document in Markdown for context. Rewrite ONLY the one section named below and return JUST that section — not the whole document.
 
 Section to regenerate: {req.section_heading.strip()}{instruction_line}
 
 FORMATTING RULES — follow the document template in your corporate context exactly for this section:
+- Start your output with the section's heading line, keeping the heading text identical to "{req.section_heading.strip()}" so it can be matched in the document.
 - Use the same Markdown heading levels the template defines for this section and its sub-sections (e.g. `##` for a main section, `###` for sub-sections). Do NOT use bold text (`**...**`) in place of a heading.
 - Use Markdown bullet lists (`- `) for any list of items, exactly as the template does.
-- Keep the section's heading text identical to "{req.section_heading.strip()}" so it can be matched in the document.
 - Match the template's structure, field labels, and ordering for this section.
 
-Full document:
+Full document (context only — do NOT return the whole thing):
 {req.full_content}
 
-Return ONLY the complete updated Markdown document with that one section rewritten to match the template's formatting. No preamble, no explanation."""
+Return ONLY the rewritten section in Markdown, starting with its heading "{req.section_heading.strip()}". No other sections, no preamble, no explanation."""
     )
-    updated_content = strip_code_fences(response.text)
+    new_section_md = strip_code_fences(response.text).strip()
 
-    sections = _parse_sections(updated_content)
-    updated_section = next(
-        (s for s in sections if s["heading"].lower() == req.section_heading.lower()),
-        None,
-    )
+    # Rebuild the full document by splicing the rewritten section into the
+    # ORIGINAL content, preserving every other section (and the title preamble)
+    # verbatim. We never trust the model to echo back the whole document — models
+    # commonly return only the section, and reconstructing from the original is
+    # what guarantees the rest of the document can't be lost when it's saved.
+    target = req.section_heading.strip().lower()
+    parts = re.split(r'(?=\n#{1,3} )', req.full_content)
+    rebuilt: list[str] = []
+    matched = False
+    for part in parts:
+        first_line = part.strip().split('\n')[0] if part.strip() else ''
+        m = re.match(r'^#{1,3}\s+(.+)', first_line)
+        heading = m.group(1).strip().lower() if m else None
+        if not matched and heading == target:
+            leading = part[:len(part) - len(part.lstrip('\n'))]  # keep original spacing
+            rebuilt.append(leading + new_section_md)
+            matched = True
+        else:
+            rebuilt.append(part)
+    reconstructed_full = ''.join(rebuilt) if matched else req.full_content
 
-    # Find the heading that follows this section (so we know where it ends in the doc).
+    updated_section = {"heading": req.section_heading.strip(), "content": new_section_md}
+
+    # Find the heading that follows this section (boundary for the surgical replace).
     orig_headings = [s["heading"] for s in _parse_sections(req.full_content)]
     next_heading = None
     if req.section_heading in orig_headings:
@@ -2227,9 +2255,9 @@ Return ONLY the complete updated Markdown document with that one section rewritt
     # caller shows the proposed change for review, then calls
     # POST /documents/{doc_id}/save-section to persist it once the user confirms.
     return {
-        field_key: updated_content,
+        field_key: reconstructed_full,
         "updated_section": updated_section,
-        "full_content": updated_content,
+        "full_content": reconstructed_full,
         "next_heading": next_heading,
     }
 
@@ -2240,6 +2268,39 @@ class DocSaveSectionRequest(BaseModel):
     next_heading: str | None = None
     section_content: str
     full_content: str
+
+
+async def _full_content_is_safe(doc_id: str, full_content: str) -> bool:
+    """Guard for the full re-upload path: a section edit should never shrink the
+    document to a fragment. Compares the incoming content's length against the
+    live doc's text (format-agnostic, so it also protects old bold-heading docs).
+    Fails open — if the live doc can't be read, the save is allowed."""
+    new_len = len((full_content or "").strip())
+    try:
+        token = await _get_drive_token(readonly=True)
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(
+                f"https://docs.googleapis.com/v1/documents/{doc_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if not r.is_success:
+            return True
+        live_len = 0
+        for el in r.json().get("body", {}).get("content", []):
+            p = el.get("paragraph")
+            if not p:
+                continue
+            live_len += len("".join(
+                e.get("textRun", {}).get("content", "") for e in p.get("elements", [])
+            ))
+    except Exception as exc:
+        logger.warning("save-section safety check failed for %s: %s", doc_id, exc)
+        return True
+    # Only block when the live doc has real substance and the incoming content is
+    # less than half its size — the signature of a truncated single-section payload.
+    if live_len > 800 and new_len < live_len * 0.5:
+        return False
+    return True
 
 
 @app.post("/documents/{doc_id}/save-section")
@@ -2259,7 +2320,22 @@ async def save_doc_section(doc_id: str, req: DocSaveSectionRequest, _: dict = De
         except Exception as exc:
             logger.warning("Surgical section replace failed for %s: %s", doc_id, exc)
             format_preserved = False
+
     if not format_preserved:
+        # Full re-upload fallback. Guard against wiping the document: if the
+        # incoming full_content is far shorter than the live doc (e.g. a stale
+        # client sent only the regenerated section), refuse rather than overwrite
+        # the whole doc with a fragment.
+        if not await _full_content_is_safe(doc_id, req.full_content):
+            logger.warning(
+                "save-section: full_content for %s looks truncated — refusing full re-upload",
+                doc_id,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail="The update looked incomplete and was not saved, to avoid "
+                       "overwriting the rest of the document. Please retry.",
+            )
         await _update_drive_doc(doc_id, req.full_content)
 
     return {
