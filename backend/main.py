@@ -2208,24 +2208,47 @@ Return ONLY the complete updated Markdown document with that one section rewritt
         if idx + 1 < len(orig_headings):
             next_heading = orig_headings[idx + 1]
 
-    # Surgical in-place edit — keeps every other section's formatting intact.
-    # Falls back to a full re-upload only if the section can't be located.
+    # This endpoint returns a PREVIEW only — it does NOT write to Drive. The
+    # caller shows the proposed change for review, then calls
+    # POST /documents/{doc_id}/save-section to persist it once the user confirms.
+    return {
+        field_key: updated_content,
+        "updated_section": updated_section,
+        "full_content": updated_content,
+        "next_heading": next_heading,
+    }
+
+
+class DocSaveSectionRequest(BaseModel):
+    doc_type: str = "crd"
+    section_heading: str
+    next_heading: str | None = None
+    section_content: str
+    full_content: str
+
+
+@app.post("/documents/{doc_id}/save-section")
+async def save_doc_section(doc_id: str, req: DocSaveSectionRequest, _: dict = Depends(require_auth)):
+    """Persist a previewed section edit to the Drive doc. Split out from
+    regenerate-section so the user reviews and confirms the change before it's
+    written. Surgical in-place edit, with a full re-upload fallback."""
+    if not req.section_heading.strip():
+        raise HTTPException(status_code=400, detail="section_heading is required")
+
     format_preserved = False
-    if updated_section:
+    if req.section_content.strip():
         try:
             format_preserved = await _replace_doc_section(
-                doc_id, req.section_heading, next_heading, updated_section["content"]
+                doc_id, req.section_heading, req.next_heading, req.section_content
             )
         except Exception as exc:
             logger.warning("Surgical section replace failed for %s: %s", doc_id, exc)
             format_preserved = False
     if not format_preserved:
-        await _update_drive_doc(doc_id, updated_content)
+        await _update_drive_doc(doc_id, req.full_content)
 
     return {
-        field_key: updated_content,
-        "updated_section": updated_section,
-        "full_content": updated_content,
+        "full_content": req.full_content,
         "format_preserved": format_preserved,
     }
 
