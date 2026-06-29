@@ -121,27 +121,30 @@ Example:
 AI Instructions:
 - Create one entry for each distinct business requirement this initiative is proposing, based on §2.2 Desired Outcome.
 - Each entry is a requirement-level need — not a granular feature or sub-requirement. Group related actions into one entry.
-- BRD ID: use the format BR-01, BR-02, BR-03 and so on, incrementing for each requirement.
-- Business Name: write a short plain English name for the requirement — no acronyms, no jargon. e.g. "Multi-tenant data isolation", "Automated anomaly detection", "Role-based access control". Spell out any technical terms in full.
-- Description: write 2–4 sentences describing what the requirement should do from an internal product perspective. Cover what the system or team needs to do, how it should work at a high level, and what the expected outcome is. Do not describe technical implementation. Write as if explaining to someone with no product knowledge.
-- Constraints: list any constraints specific to this requirement only — not initiative-level constraints. Leave blank if none apply.
+- BR ID: use the format BR-01, BR-02, BR-03 and so on, incrementing for each requirement. No letter suffixes.
+- Heading: each requirement MUST be its own level-3 (###) heading in the form "### BR-0N  <Business Name>" — the BR ID and a short plain-English name on one line, separated by two spaces. The name has no acronyms or jargon (spell terms out, e.g. "Multi-tenant data isolation", not "MTDI").
+- Description: a paragraph of 2–4 sentences directly under the heading — what the requirement should do from an internal product perspective, how it works at a high level, and the expected outcome. No label and no bullet list; no technical implementation. Write as if explaining to someone with no product knowledge.
+- Constraints: a single line beginning with the bold label "**Constraints**" then the constraint text, specific to THIS requirement only. Omit the line entirely if there are none.
 - After completing the list, cross-check every problem point in §2.1 to make sure each one is addressed by at least one entry. Add missing entries if needed.
 -->
 
-**BR-01**
-- **Business Name:** _(Short plain English name)_
-- **Description:** _(What the requirement should do and what outcome it delivers for the product or business)_
-- **Constraints:**
+### BR-01  _(Business Name)_
 
-**BR-02**
-- **Business Name:**
-- **Description:**
-- **Constraints:**
+_(Description — 2–4 sentences: what the requirement should do, how it works at a high level, and the expected outcome.)_
 
-**BR-03**
-- **Business Name:**
-- **Description:**
-- **Constraints:**
+**Constraints** _(specific to this requirement only; omit this line if there are none)_
+
+### BR-02  _(Business Name)_
+
+_(Description)_
+
+**Constraints** _(or omit if none)_
+
+### BR-03  _(Business Name)_
+
+_(Description)_
+
+**Constraints** _(or omit if none)_
 
 ---
 

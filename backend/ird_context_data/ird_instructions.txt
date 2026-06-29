@@ -135,10 +135,10 @@ BUSINESS REQUIREMENTS
 
 - Create one entry per distinct business requirement this initiative is proposing — not per feature or sub-step
 - Each entry should represent a complete, standalone business need
-- Use the format BR-01, BR-02, BR-03 for Requirement IDs
-- Business Name: short plain English name with no acronyms or jargon — spell out any technical terms in full
-- Description: 2–4 sentences describing what the requirement should do from an internal product perspective. Cover what the system or team needs to do, how it should work at a high level, and what the expected outcome is. Do not describe technical implementation.
-- Constraints: list constraints specific to this requirement only — not initiative-level constraints. Leave blank if none apply.
+- Heading: each requirement MUST be its own level-3 (###) heading in the form "### BR-0N  <Business Name>" — the BR ID and a short plain English name on one line, separated by two spaces. Use BR-01, BR-02, BR-03… (no letter suffixes). Do NOT use bold text (**BR-01**) in place of the heading.
+- Business Name (on the heading line): short plain English name with no acronyms or jargon — spell out any technical terms in full
+- Description: a paragraph of 2–4 sentences directly under the heading (no label, no bullets) describing what the requirement should do from an internal product perspective. Cover what the system or team needs to do, how it should work at a high level, and what the expected outcome is. Do not describe technical implementation.
+- Constraints: a single line beginning with the bold label "**Constraints**" then the constraint text, specific to this requirement only. Omit the line if none apply.
 - After completing the list, cross-check every problem point in §2.1 — every problem must be addressed by at least one requirement entry. Add missing entries if needed.
 
 

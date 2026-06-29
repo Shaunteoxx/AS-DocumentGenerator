@@ -99,7 +99,8 @@ REQUEST SUMMARY (§2)
 BUSINESS REQUIREMENTS (§3)
 - One entry per distinct business need — not per feature or sub-step; each is a complete need, not a granular step.
 - If a single need clearly spans multiple distinct actors or platform tiers (e.g. end users AND admins AND workspace setup), keep it as the client expressed it but add an Open Issue noting it may decompose into several BRDs downstream.
-- Business Name: short plain-English name, no acronyms — spell terms out in full (e.g. "Permit application management", not "PTW").
+- Heading: each requirement MUST be its own level-3 (###) heading in the form "### BR-0N  <Business Name>" — BR ID and name on one line, separated by two spaces. Do NOT use bold text (**BR-01**) in place of the heading.
+- Business Name (on the heading line): short plain-English name, no acronyms — spell terms out in full (e.g. "Permit application management", not "PTW").
 - Description: 2–4 sentences on what it should do, how it works at a high level, and the client outcome. No technical implementation.
 - Constraints (per requirement): list constraints specific to that requirement only; blank if none.
 - IDs: BR-01, BR-02, BR-03 … no letter suffixes.
