@@ -49,7 +49,7 @@ function loadHistory() {
 }
 
 function extractInternalName(md) {
-  const match = md.match(/\*\*Team\s*\/\s*Department\*\*[:\s]+([^\n*]+)/i)
+  const match = md.match(/\*\*(?:Initiative\s+Name|Team\s*\/\s*Department)\*\*[:\s]+([^\n*]+)/i)
   if (match) return match[1].trim()
   const heading = md.match(/^#\s+(.+)$/m)
   return heading ? heading[1].trim() : 'Internal Requirement'

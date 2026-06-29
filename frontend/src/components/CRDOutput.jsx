@@ -70,7 +70,19 @@ async function doUploadToDrive(token, mdContent, fileName, folderId) {
   const data = await res.json()
   const webViewLink = data.webViewLink || `https://drive.google.com/file/d/${data.id}/view`
   window.open(webViewLink, '_blank')
-  return webViewLink
+  return { webViewLink, docId: data.id }
+}
+
+async function applyHeadingStyles(docId, markdown) {
+  try {
+    await authFetch(`${API}/documents/${docId}/apply-heading-styles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown }),
+    })
+  } catch {
+    // best-effort; doc is already uploaded
+  }
 }
 
 async function logUploadToSheet(filename, clientName, driveLink, logEndpoint) {
@@ -112,12 +124,13 @@ export default function CRDOutput({ crd, crdId, onRename, onBack, folderId = CRD
     onSuccess: async (tokenResponse) => {
       try {
         storeToken(tokenResponse)
-        const webViewLink = await doUploadToDrive(
+        const { webViewLink, docId: uploadedDocId } = await doUploadToDrive(
           tokenResponse.access_token,
           pendingDriveContent.current,
           pendingDriveFileName.current,
           folderId,
         )
+        applyHeadingStyles(uploadedDocId, pendingDriveContent.current)
         const uploadedFilename = pendingDriveFileName.current
         const uploadedClientName = extractClientName(pendingDriveContent.current)
         await logUploadToSheet(uploadedFilename, uploadedClientName, webViewLink, logEndpoint)
@@ -146,7 +159,8 @@ export default function CRDOutput({ crd, crdId, onRename, onBack, folderId = CRD
     const storedToken = getStoredToken()
     if (storedToken) {
       try {
-        const webViewLink = await doUploadToDrive(storedToken, content, fileName, folderId)
+        const { webViewLink, docId: uploadedDocId } = await doUploadToDrive(storedToken, content, fileName, folderId)
+        applyHeadingStyles(uploadedDocId, content)
         await logUploadToSheet(docId, extractClientName(content), webViewLink, logEndpoint)
         setToast({ message: `${docLabel} uploaded to Google Drive · Row added to Sheets`, link: webViewLink, linkLabel: 'Open Doc' })
         setDriveLoading(false)

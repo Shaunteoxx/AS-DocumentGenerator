@@ -145,9 +145,14 @@ CORRIDOR_CLIENT_ID=your_client_id
 CORRIDOR_CLOUD_API_KEY=your_api_key
 CORRIDOR_REDIRECT_URI=your_redirect_uri
 CLICKUP_API_KEY=pk_...                     # PRD export to ClickUp
+DEV_AUTH_BYPASS=true                       # local dev only — see Auth below. NEVER set in production.
 ```
 
-> Note: `CLICKUP_API_KEY` is set locally in `backend/.env` but is **not** yet wired into `cloudbuild.yaml` as a Cloud Run secret — PRD ClickUp export will fail in production until it's added to the deploy config.
+### Auth model
+Auth is enforced in **two independent layers**:
+- **Backend (the real gate):** `require_auth` verifies the Corridor JWT (RS256, JWKS) on every API route. It is bypassed **only** when `DEV_AUTH_BYPASS=true`. This flag lives in local `backend/.env`, which is gitignored and excluded from the Docker image (`backend/.dockerignore`), and is **not** in `cloudbuild.yaml` — so production always enforces auth. Never add `DEV_AUTH_BYPASS` to the deploy config.
+- **Frontend (UI gate only):** if `VITE_CORRIDOR_CLIENT_ID` is unset, the login screen is skipped (`setAuthenticated(true)`) for local convenience. This only hides the login UI — it does not authenticate API calls, which the backend still rejects without a valid token. Production Vercel sets `VITE_CORRIDOR_CLIENT_ID`, so the gate is active.
+
 
 ## Integrations Reference
 

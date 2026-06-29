@@ -76,7 +76,19 @@ async function doUploadToDrive(token, mdContent, fileName) {
   const data = await res.json()
   const webViewLink = data.webViewLink || `https://drive.google.com/file/d/${data.id}/view`
   window.open(webViewLink, '_blank')
-  return webViewLink
+  return { webViewLink, docId: data.id }
+}
+
+async function applyHeadingStyles(docId, markdown) {
+  try {
+    await authFetch(`${API}/documents/${docId}/apply-heading-styles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown }),
+    })
+  } catch {
+    // best-effort; doc is already uploaded
+  }
 }
 
 async function logToSheet(filename, ird, driveLink) {
@@ -117,11 +129,12 @@ export default function IRDOutput({ ird, irdId, onRename, onBack }) {
     onSuccess: async (tokenResponse) => {
       try {
         storeToken(tokenResponse)
-        const webViewLink = await doUploadToDrive(
+        const { webViewLink, docId: uploadedDocId } = await doUploadToDrive(
           tokenResponse.access_token,
           pendingDriveContent.current,
           pendingDriveFileName.current,
         )
+        applyHeadingStyles(uploadedDocId, pendingDriveContent.current)
         await logToSheet(
           pendingDriveFileName.current,
           pendingDriveContent.current,
@@ -152,7 +165,8 @@ export default function IRDOutput({ ird, irdId, onRename, onBack }) {
     const storedToken = getStoredToken()
     if (storedToken) {
       try {
-        const webViewLink = await doUploadToDrive(storedToken, content, fileName)
+        const { webViewLink, docId: uploadedDocId } = await doUploadToDrive(storedToken, content, fileName)
+        applyHeadingStyles(uploadedDocId, content)
         await logToSheet(docId, content, webViewLink)
         setToast({ message: 'IRD uploaded to Google Drive · Row added to Sheets', link: webViewLink, linkLabel: 'Open Doc' })
         setDriveLoading(false)

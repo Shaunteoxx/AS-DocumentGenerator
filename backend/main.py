@@ -705,7 +705,10 @@ class IrdLogToSheetRequest(BaseModel):
 
 
 def extract_ird_initiative_name(md: str) -> str:
-    match = re.search(r'-\s*\*\*Initiative Name:\*\*\s*([^\n]+)', md, re.IGNORECASE)
+    match = re.search(
+        r'\*\*(?:Initiative\s+Name|Team\s*/\s*Department)\*\*[:\s]+([^\n*]+)',
+        md, re.IGNORECASE,
+    )
     if match:
         return match[1].strip()
     heading = re.search(r'^#\s+(.+)$', md, re.MULTILINE)
@@ -2225,6 +2228,64 @@ Return ONLY the complete updated Markdown document with that one section rewritt
         "full_content": updated_content,
         "format_preserved": format_preserved,
     }
+
+
+class ApplyHeadingStylesRequest(BaseModel):
+    markdown: str
+
+
+@app.post("/documents/{doc_id}/apply-heading-styles")
+async def apply_doc_heading_styles(doc_id: str, req: ApplyHeadingStylesRequest, _: dict = Depends(require_auth)):
+    """After a Drive HTML upload, apply real Heading 1/2/3 styles to paragraphs
+    whose text matches headings in the source markdown.  Best-effort — errors
+    are logged but not surfaced to the user since the doc is already uploaded."""
+    heading_map: dict[str, int] = {}
+    for line in req.markdown.splitlines():
+        m = re.match(r'^(#{1,6})\s+(.+)$', line)
+        if m:
+            heading_map[m.group(2).strip()] = len(m.group(1))
+
+    if not heading_map:
+        return {"status": "ok", "updated": 0}
+
+    token = await _get_drive_token(readonly=False)
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(f"https://docs.googleapis.com/v1/documents/{doc_id}", headers=headers)
+        if not r.is_success:
+            logger.warning("apply-heading-styles: Docs read failed for %s: %s", doc_id, r.text)
+            return {"status": "warning", "message": "could not read document"}
+
+        body_content = r.json().get("body", {}).get("content", [])
+        requests_list: list[dict] = []
+        for el in body_content:
+            p = el.get("paragraph")
+            if not p:
+                continue
+            txt = "".join(
+                e.get("textRun", {}).get("content", "") for e in p.get("elements", [])
+            ).strip("\n").strip()
+            if txt in heading_map:
+                level = heading_map[txt]
+                requests_list.append({"updateParagraphStyle": {
+                    "range": {"startIndex": el["startIndex"], "endIndex": el["endIndex"]},
+                    "paragraphStyle": {"namedStyleType": f"HEADING_{level}"},
+                    "fields": "namedStyleType",
+                }})
+
+        if not requests_list:
+            return {"status": "ok", "updated": 0}
+
+        br = await client.post(
+            f"https://docs.googleapis.com/v1/documents/{doc_id}:batchUpdate",
+            headers=headers,
+            json={"requests": requests_list},
+        )
+        if not br.is_success:
+            logger.warning("apply-heading-styles: batchUpdate failed for %s: %s", doc_id, br.text)
+            return {"status": "warning", "message": br.text}
+
+    return {"status": "ok", "updated": len(requests_list)}
 
 
 @app.post("/brd/log-to-sheet")
