@@ -51,6 +51,18 @@ export async function authFetch(url, options = {}) {
   return res
 }
 
+// Strip a wrapping ``` / ```markdown fence the model sometimes adds around the
+// whole document. Without this, marked.parse turns the entire doc into one code
+// block and the exported Google Doc shows raw markdown (#, **, -) as literal text.
+export function stripCodeFences(markdown) {
+  const s = (markdown || '').trim()
+  if (!s.startsWith('```')) return s
+  const lines = s.split('\n')
+  lines.shift() // opening fence (``` + optional language tag)
+  if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop()
+  return lines.join('\n').trim()
+}
+
 export function extractClientName(markdown) {
   const labeled = markdown.match(
     /\*?\*?(?:Client|Company|Account|Customer)(?:\s+Name)?\*?\*?\s*[:\|]\s*\**([^\n\|*]+)\**/i

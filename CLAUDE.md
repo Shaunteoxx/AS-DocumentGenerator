@@ -69,6 +69,7 @@ Each doc type has its own route and context data folder:
 ### API
 - Built with FastAPI
 - Calls the **Google Gemini API** (`gemini-2.5-flash`) for all document generation and AI inference
+- Generated/regenerated document content is passed through `strip_code_fences()` before returning — the model sometimes wraps the whole doc in a ` ```markdown ` fence, which would otherwise render as one literal code block (raw `#`/`**`/`-`) in the exported Google Doc. Frontend `stripCodeFences()` (in `utils.js`, used in the export path) is a second guard for already-stored content.
 - Uses Google Drive API (service account) to read/export documents for the graph feature and the Document Review Hub
 - Uses the Google Docs API (service account) to surgically edit document sections in place (Review Hub write-back)
 - Uses Google Sheets (gspread) to log generated documents

@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { marked } from 'marked'
 import { useGoogleLogin } from '@react-oauth/google'
 import { DownloadIcon, PencilIcon, CloudUploadIcon, ArrowLeftIcon } from '../Icons'
-import { authFetch } from '../../utils'
+import { authFetch, stripCodeFences } from '../../utils'
 import { extractBrdTitle } from '../../brd-utils'
 import Toast from '../Toast'
 
@@ -32,7 +32,7 @@ function storeToken(tokenResponse) {
 }
 
 async function doUploadToDrive(token, mdContent, fileName) {
-  const html = `<!DOCTYPE html><html><body>${marked.parse(mdContent)}</body></html>`
+  const html = `<!DOCTYPE html><html><body>${marked.parse(stripCodeFences(mdContent))}</body></html>`
   const htmlBlob = new Blob([html], { type: 'text/html' })
 
   const boundary = `drive_${Date.now()}`

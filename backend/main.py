@@ -125,6 +125,21 @@ def parse_questions(raw: str) -> list[str]:
     raise HTTPException(status_code=500, detail="Failed to parse questions from model response")
 
 
+def strip_code_fences(text: str) -> str:
+    """Strip a wrapping ``` / ```markdown fence the model sometimes puts around
+    the entire document. Left in, that wrapper makes the whole doc render as one
+    literal code block — raw #, **, - shown as text — when the markdown is
+    converted to a Google Doc on export."""
+    s = (text or "").strip()
+    if not s.startswith("```"):
+        return s
+    lines = s.split("\n")
+    lines = lines[1:]  # drop the opening fence line (``` + optional language tag)
+    if lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]  # drop the closing fence line
+    return "\n".join(lines).strip()
+
+
 def get_features_from_sheet() -> str:
     try:
         import gspread
@@ -471,7 +486,7 @@ Today's date is {today}. Use this for the Date Prepared field.
 Produce the full CRD in Markdown format.{filename_instruction}"""
     )
 
-    crd = response.text
+    crd = strip_code_fences(response.text)
     crd_id = filename
 
     crd = re.sub(
@@ -499,7 +514,7 @@ Full CRD:
 
 Return ONLY the complete updated Markdown document with that section rewritten. No preamble, no explanation."""
     )
-    return {"crd": response.text}
+    return {"crd": strip_code_fences(response.text)}
 
 
 
@@ -675,7 +690,7 @@ Today's date is {today}. Use this for the Date Prepared field.
 Produce the full IRD in Markdown format.{filename_instruction}"""
     )
 
-    ird = response.text
+    ird = strip_code_fences(response.text)
     return {"crd": ird, "crd_id": filename}
 
 
@@ -695,7 +710,7 @@ Full IRD:
 
 Return ONLY the complete updated Markdown document with that section rewritten. No preamble, no explanation."""
     )
-    return {"crd": response.text}
+    return {"crd": strip_code_fences(response.text)}
 
 
 class IrdLogToSheetRequest(BaseModel):
@@ -865,7 +880,7 @@ Today's date is {today}. Use this for the Date Prepared field.
 Produce the full PRD in Markdown format."""
     )
 
-    prd = response.text
+    prd = strip_code_fences(response.text)
     filename = extract_prd_title(prd)
     return {"crd": prd, "crd_id": filename}
 
@@ -886,7 +901,7 @@ Full PRD:
 
 Return ONLY the complete updated Markdown document with that section rewritten. No preamble, no explanation."""
     )
-    return {"crd": response.text}
+    return {"crd": strip_code_fences(response.text)}
 
 
 CLICKUP_API_KEY = os.getenv("CLICKUP_API_KEY", "")
@@ -1739,7 +1754,7 @@ Use today's date ({today}) for First Created.
 Produce the full BRD in Markdown format."""
     )
 
-    brd = response.text
+    brd = strip_code_fences(response.text)
     brd_id = generate_brd_filename(brd)
     return {"brd": brd, "brd_id": brd_id}
 
@@ -1760,7 +1775,7 @@ Full BRD:
 
 Return ONLY the complete updated Markdown document with that section rewritten. No preamble, no explanation."""
     )
-    return {"brd": response.text}
+    return {"brd": strip_code_fences(response.text)}
 
 
 # ── Document Review Hub ───────────────────────────────────────────────────────
@@ -2192,7 +2207,7 @@ Full document:
 
 Return ONLY the complete updated Markdown document with that one section rewritten to match the template's formatting. No preamble, no explanation."""
     )
-    updated_content = response.text
+    updated_content = strip_code_fences(response.text)
 
     sections = _parse_sections(updated_content)
     updated_section = next(
