@@ -83,7 +83,9 @@ async def require_auth(
         logger.warning("require_auth: no token present")
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
-        return verify_token(token)
+        # verify_token can hit the network (JWKS refresh) and does CPU-bound
+        # signature checks — keep it off the event loop.
+        return await asyncio.to_thread(verify_token, token)
     except jwt.ExpiredSignatureError:
         logger.warning("require_auth: token expired")
         raise HTTPException(status_code=401, detail="Token expired")
@@ -125,6 +127,22 @@ def parse_questions(raw: str) -> list[str]:
     raise HTTPException(status_code=500, detail="Failed to parse questions from model response")
 
 
+def parse_json_response(raw: str, error_detail: str) -> dict:
+    """Parse a JSON object from model output, tolerating ``` fences and prose."""
+    text = (raw or "").strip()
+    if "```" in text:
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    text = text.rstrip("`").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.error("%s: %s | raw: %s", error_detail, exc, (raw or "")[:300])
+        raise HTTPException(status_code=500, detail=error_detail)
+
+
 def strip_code_fences(text: str) -> str:
     """Strip a wrapping ``` / ```markdown fence the model sometimes puts around
     the entire document. Left in, that wrapper makes the whole doc render as one
@@ -140,7 +158,14 @@ def strip_code_fences(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+_features_cache: dict = {"data": None, "ts": 0.0}
+FEATURES_CACHE_TTL = 300  # seconds
+
+
 def get_features_from_sheet() -> str:
+    now = time.time()
+    if _features_cache["data"] is not None and now - _features_cache["ts"] < FEATURES_CACHE_TTL:
+        return _features_cache["data"]
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -175,7 +200,10 @@ def get_features_from_sheet() -> str:
             parts.append("=== CURRENT FEATURES ===\n" + "\n".join(current))
         if future:
             parts.append("=== FUTURE FEATURES ===\n" + "\n".join(future))
-        return "\n\n".join(parts) if parts else "No features found in sheet."
+        result = "\n\n".join(parts) if parts else "No features found in sheet."
+        _features_cache["data"] = result
+        _features_cache["ts"] = now
+        return result
 
     except Exception as exc:
         logger.warning("Google Sheets fetch failed (%s), falling back to local files.", exc)
@@ -194,16 +222,16 @@ def extract_client_name_from_crd(md: str) -> str:
     return ""
 
 
-def load_context() -> str:
+def _load_context_dir(directory: Path, empty_msg: str) -> str:
     parts = []
-    for f in sorted(CONTEXT_DIR.glob("*")):
+    for f in sorted(directory.glob("*")):
         if f.is_file() and f.suffix in {".txt", ".md"}:
             parts.append(f"### {f.name}\n{f.read_text()}")
-    return "\n\n".join(parts) if parts else "No corporate context loaded."
+    return "\n\n".join(parts) if parts else empty_msg
 
 
-def get_model(context: str) -> genai.GenerativeModel:
-    system = f"""You are a CRD (Customer Request Document) generator assistant. You help analysts create professional CRDs by analyzing client notes, asking targeted clarifying questions, and producing formatted CRD documents.
+def _make_model(role: str, context: str) -> genai.GenerativeModel:
+    system = f"""{role}
 
 Always follow the corporate context and templates below when generating documents.
 
@@ -211,6 +239,17 @@ Always follow the corporate context and templates below when generating document
 {context}
 --- END CORPORATE CONTEXT ---"""
     return genai.GenerativeModel(model_name=MODEL_NAME, system_instruction=system)
+
+
+def load_context() -> str:
+    return _load_context_dir(CONTEXT_DIR, "No corporate context loaded.")
+
+
+def get_model(context: str) -> genai.GenerativeModel:
+    return _make_model(
+        "You are a CRD (Customer Request Document) generator assistant. You help analysts create professional CRDs by analyzing client notes, asking targeted clarifying questions, and producing formatted CRD documents.",
+        context,
+    )
 
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".docx", ".pdf", ".pptx"}
@@ -223,8 +262,8 @@ def extract_text(ext: str, content: bytes) -> str:
         doc = Document(io.BytesIO(content))
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
     elif ext == ".pdf":
-        pdf = fitz.open(stream=content, filetype="pdf")
-        return "\n".join(page.get_text() for page in pdf)
+        with fitz.open(stream=content, filetype="pdf") as pdf:
+            return "\n".join(page.get_text() for page in pdf)
     elif ext == ".pptx":
         prs = Presentation(io.BytesIO(content))
         parts = []
@@ -400,7 +439,7 @@ async def analyze(
         raise HTTPException(status_code=400, detail="No content provided")
 
     model = get_model(load_context())
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Analyze these client notes and extract:
 1. Key requirements
 2. Stakeholders mentioned
@@ -422,13 +461,13 @@ async def clarify(req: ClarifyRequest, _: dict = Depends(require_auth)):
             f"Q: {a['question']}\nA: {a['answer']}" for a in req.answers
         )
 
-    features_text = get_features_from_sheet()
+    features_text = await asyncio.to_thread(get_features_from_sheet)
     features_block = (
         f"\n\n--- ALLOCATE SPACE PLATFORM FEATURES (live from product sheet) ---\n{features_text}\n---"
         if features_text else ""
     )
 
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Based on the client notes and analysis below, generate 3–5 targeted clarifying questions needed to complete a CRD. Only ask what is truly necessary. Do not ask about platform features or capabilities — these are already known from the product sheet above.
 
 Client Notes:
@@ -463,14 +502,14 @@ async def generate(req: GenerateRequest, _: dict = Depends(require_auth)):
         "Do not generate a new ID."
     )
 
-    features_text = get_features_from_sheet()
+    features_text = await asyncio.to_thread(get_features_from_sheet)
     features_block = (
         f"\n\n--- ALLOCATE SPACE PLATFORM FEATURES (live from product sheet) ---\n{features_text}\n---"
         if features_text else ""
     )
 
     today = datetime.date.today().isoformat()
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Generate a complete, professionally formatted CRD document following the corporate template in your context.
 
 Client Notes:
@@ -504,7 +543,7 @@ async def regenerate_section(req: RegenerateRequest, _: dict = Depends(require_a
         raise HTTPException(status_code=400, detail="section is required")
     model = get_model(load_context())
     instruction_line = f"\nAdditional instructions: {req.instruction.strip()}" if req.instruction.strip() else ""
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""You are given a complete CRD document in Markdown format. Rewrite ONLY the section named below. Do not alter any other section, heading, or content.
 
 Section to regenerate: {req.section.strip()}{instruction_line}
@@ -518,22 +557,34 @@ Return ONLY the complete updated Markdown document with that section rewritten. 
 
 
 
+def _open_worksheet(worksheet: str | int):
+    """Sync gspread helper — always call via asyncio.to_thread."""
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
+    gc = gspread.authorize(creds)
+    sheet = gc.open_by_key(SHEET_ID)
+    if isinstance(worksheet, int):
+        return sheet.get_worksheet_by_id(worksheet)
+    return sheet.worksheet(worksheet)
+
+
 @app.post("/log-to-sheet")
 async def log_to_sheet(req: LogToSheetRequest, _: dict = Depends(require_auth)):
     date_str = datetime.date.today().strftime("%-d %b %y")
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
 
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
-        gc = gspread.authorize(creds)
-        ws = gc.open_by_key(SHEET_ID).worksheet("CR")
+    def _write():
+        ws = _open_worksheet("CR")
         ws.append_row(
             [req.filename, req.client_name, "", req.drive_link, date_str, "", "", ""],
             value_input_option="RAW",
             insert_data_option="INSERT_ROWS",
         )
+
+    try:
+        await asyncio.to_thread(_write)
     except Exception as exc:
         logger.warning("CR sheet write failed in /log-to-sheet (%s)", exc)
         return {"status": "warning", "message": str(exc)}
@@ -546,22 +597,14 @@ IRD_CONTEXT_DIR = Path(__file__).parent / "ird_context_data"
 
 
 def load_ird_context() -> str:
-    parts = []
-    for f in sorted(IRD_CONTEXT_DIR.glob("*")):
-        if f.is_file() and f.suffix in {".txt", ".md"}:
-            parts.append(f"### {f.name}\n{f.read_text()}")
-    return "\n\n".join(parts) if parts else "No IRD context loaded."
+    return _load_context_dir(IRD_CONTEXT_DIR, "No IRD context loaded.")
 
 
 def get_ird_model(context: str) -> genai.GenerativeModel:
-    system = f"""You are an IRD (Internal Requirement Document) generator assistant for Allocate Space. You help teams document internal operational requirements by analyzing source documents, asking targeted clarifying questions, and producing formatted IRD documents.
-
-Always follow the corporate context and templates below when generating documents.
-
---- CORPORATE CONTEXT ---
-{context}
---- END CORPORATE CONTEXT ---"""
-    return genai.GenerativeModel(model_name=MODEL_NAME, system_instruction=system)
+    return _make_model(
+        "You are an IRD (Internal Requirement Document) generator assistant for Allocate Space. You help teams document internal operational requirements by analyzing source documents, asking targeted clarifying questions, and producing formatted IRD documents.",
+        context,
+    )
 
 
 def _name_to_ird_id(name: str, version: int = 1) -> str:
@@ -617,7 +660,7 @@ async def ird_analyze(
         raise HTTPException(status_code=400, detail="No content provided")
 
     model = get_ird_model(load_ird_context())
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Analyze these internal documents and extract:
 1. Key internal requirements
 2. Teams or stakeholders mentioned
@@ -639,7 +682,7 @@ async def ird_clarify(req: ClarifyRequest, _: dict = Depends(require_auth)):
             f"Q: {a['question']}\nA: {a['answer']}" for a in req.answers
         )
 
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Based on the internal documents and analysis below, generate 3–5 targeted clarifying questions needed to complete an IRD. Only ask what is truly necessary.
 
 Source Documents:
@@ -674,7 +717,7 @@ async def ird_generate(req: GenerateRequest, _: dict = Depends(require_auth)):
     )
 
     today = datetime.date.today().isoformat()
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Generate a complete, professionally formatted IRD document following the corporate template in your context.
 
 Source Documents:
@@ -700,7 +743,7 @@ async def ird_regenerate(req: IrdRegenerateRequest, _: dict = Depends(require_au
         raise HTTPException(status_code=400, detail="section is required")
     model = get_ird_model(load_ird_context())
     instruction_line = f"\nAdditional instructions: {req.instruction.strip()}" if req.instruction.strip() else ""
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""You are given a complete IRD document in Markdown format. Rewrite ONLY the section named below. Do not alter any other section, heading, or content.
 
 Section to regenerate: {req.section.strip()}{instruction_line}
@@ -742,19 +785,17 @@ async def ird_log_to_sheet(req: IrdLogToSheetRequest, _: dict = Depends(require_
     initiative_name = extract_ird_initiative_name(req.ird)
     description = extract_ird_key_request(req.ird)
     doc_link = f'=HYPERLINK("{req.drive_link}","{initiative_name}")' if req.drive_link else initiative_name
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
 
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
-        gc = gspread.authorize(creds)
-        ws = gc.open_by_key(SHEET_ID).get_worksheet_by_id(1456248746)
+    def _write():
+        ws = _open_worksheet(1456248746)
         ws.append_row(
             [req.filename, initiative_name, description, "", doc_link],
             value_input_option="USER_ENTERED",
             insert_data_option="INSERT_ROWS",
         )
+
+    try:
+        await asyncio.to_thread(_write)
     except Exception as exc:
         logger.warning("IR sheet write failed in /ird/log-to-sheet (%s)", exc)
         return {"status": "warning", "message": str(exc)}
@@ -767,22 +808,14 @@ PRD_CONTEXT_DIR = Path(__file__).parent / "prd_context_data"
 
 
 def load_prd_context() -> str:
-    parts = []
-    for f in sorted(PRD_CONTEXT_DIR.glob("*")):
-        if f.is_file() and f.suffix in {".txt", ".md"}:
-            parts.append(f"### {f.name}\n{f.read_text()}")
-    return "\n\n".join(parts) if parts else "No PRD context loaded."
+    return _load_context_dir(PRD_CONTEXT_DIR, "No PRD context loaded.")
 
 
 def get_prd_model(context: str) -> genai.GenerativeModel:
-    system = f"""You are a PRD (Product Requirement Document) generator assistant for Allocate Space. You help product managers create professional PRDs by analyzing source documents, asking targeted clarifying questions, and producing formatted PRD documents.
-
-Always follow the corporate context and templates below when generating documents.
-
---- CORPORATE CONTEXT ---
-{context}
---- END CORPORATE CONTEXT ---"""
-    return genai.GenerativeModel(model_name=MODEL_NAME, system_instruction=system)
+    return _make_model(
+        "You are a PRD (Product Requirement Document) generator assistant for Allocate Space. You help product managers create professional PRDs by analyzing source documents, asking targeted clarifying questions, and producing formatted PRD documents.",
+        context,
+    )
 
 
 class PrdRegenerateRequest(BaseModel):
@@ -811,7 +844,7 @@ async def prd_analyze(
         raise HTTPException(status_code=400, detail="No content provided")
 
     model = get_prd_model(load_prd_context())
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Analyze these product documents and extract:
 1. Key product requirements and user needs
 2. Target user personas mentioned
@@ -833,7 +866,7 @@ async def prd_clarify(req: ClarifyRequest, _: dict = Depends(require_auth)):
             f"Q: {a['question']}\nA: {a['answer']}" for a in req.answers
         )
 
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Based on the source documents and analysis below, generate 3–5 targeted clarifying questions needed to complete a PRD. Only ask what is truly necessary.
 
 Source Documents:
@@ -864,7 +897,7 @@ async def prd_generate(req: GenerateRequest, _: dict = Depends(require_auth)):
     )
 
     today = datetime.date.today().isoformat()
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Generate a complete, professionally formatted PRD document following the corporate template in your context.
 
 Source Documents:
@@ -891,7 +924,7 @@ async def prd_regenerate(req: PrdRegenerateRequest, _: dict = Depends(require_au
         raise HTTPException(status_code=400, detail="section is required")
     model = get_prd_model(load_prd_context())
     instruction_line = f"\nAdditional instructions: {req.instruction.strip()}" if req.instruction.strip() else ""
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""You are given a complete PRD document in Markdown format. Rewrite ONLY the section named below. Do not alter any other section, heading, or content.
 
 Section to regenerate: {req.section.strip()}{instruction_line}
@@ -962,22 +995,14 @@ BRD_CONTEXT_DIR = Path(__file__).parent / "brd_context_data"
 
 
 def load_brd_context() -> str:
-    parts = []
-    for f in sorted(BRD_CONTEXT_DIR.glob("*")):
-        if f.is_file() and f.suffix in {".txt", ".md"}:
-            parts.append(f"### {f.name}\n{f.read_text()}")
-    return "\n\n".join(parts) if parts else "No BRD context loaded."
+    return _load_context_dir(BRD_CONTEXT_DIR, "No BRD context loaded.")
 
 
 def get_brd_model(context: str) -> genai.GenerativeModel:
-    system = f"""You are a BRD (Business Requirements Document) generator assistant for Allocate Space. You help analysts create professional BRDs by analyzing source CRD documents, asking targeted clarifying questions, and producing formatted BRD documents.
-
-Always follow the corporate context and templates below when generating documents.
-
---- CORPORATE CONTEXT ---
-{context}
---- END CORPORATE CONTEXT ---"""
-    return genai.GenerativeModel(model_name=MODEL_NAME, system_instruction=system)
+    return _make_model(
+        "You are a BRD (Business Requirements Document) generator assistant for Allocate Space. You help analysts create professional BRDs by analyzing source CRD documents, asking targeted clarifying questions, and producing formatted BRD documents.",
+        context,
+    )
 
 
 def extract_brd_title(md: str) -> str:
@@ -1107,13 +1132,7 @@ async def fetch_brd_texts_from_drive(refresh: bool = False) -> list[dict]:
         return _brd_corpus_cache["data"]
 
     try:
-        from google.oauth2.service_account import Credentials
-        from google.auth.transport.requests import Request as GoogleAuthRequest
-
-        scopes = ["https://www.googleapis.com/auth/drive.readonly"]
-        creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
-        creds.refresh(GoogleAuthRequest())
-        token = creds.token
+        token = await _get_drive_token(readonly=True)
     except Exception as exc:
         logger.warning("Drive token fetch failed: %s", exc)
         return []
@@ -1157,22 +1176,39 @@ _graph_cache: dict = {"data": None, "ts": 0.0}
 GRAPH_CACHE_TTL = 300  # seconds
 
 
+async def _fetch_one_folder_file(client: httpx.AsyncClient, token: str, f: dict, doc_type: str) -> dict | None:
+    """Download and extract the text of a single Drive file for the graph."""
+    file_id, mime, name = f["id"], f.get("mimeType", ""), f.get("name", "")
+    link = f.get("webViewLink", f"https://drive.google.com/file/d/{file_id}/view")
+    try:
+        if "google-apps.document" in mime:
+            er = await client.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"mimeType": "text/plain"}, timeout=15,
+            )
+            text = er.text if er.is_success else ""
+        else:
+            dr = await client.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
+                headers={"Authorization": f"Bearer {token}"}, timeout=15,
+            )
+            text = extract_text(Path(name).suffix.lower(), dr.content) if dr.is_success else ""
+        return {"id": file_id, "name": name, "type": doc_type,
+                "link": link, "modified": f.get("modifiedTime", ""), "text": text[:8000]}
+    except Exception as exc:
+        logger.warning("Failed to read %s '%s': %s", doc_type, name, exc)
+        return None
+
+
 async def _fetch_folder(folder_id: str, doc_type: str) -> list[dict]:
     """Generic version of fetch_brd_texts_from_drive for any folder."""
     try:
-        from google.oauth2.service_account import Credentials
-        from google.auth.transport.requests import Request as GoogleAuthRequest
-        creds = Credentials.from_service_account_file(
-            str(CREDENTIALS_PATH),
-            scopes=["https://www.googleapis.com/auth/drive.readonly"],
-        )
-        creds.refresh(GoogleAuthRequest())
-        token = creds.token
+        token = await _get_drive_token(readonly=True)
     except Exception as exc:
         logger.warning("Drive token failed for %s: %s", doc_type, exc)
         return []
 
-    results = []
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(
@@ -1184,41 +1220,28 @@ async def _fetch_folder(folder_id: str, doc_type: str) -> list[dict]:
                     "pageSize": 100,
                 },
             )
+            docs = []
             for f in r.json().get("files", []):
-                file_id, mime, name = f["id"], f.get("mimeType", ""), f.get("name", "")
-                link = f.get("webViewLink", f"https://drive.google.com/file/d/{file_id}/view")
-                try:
-                    if "google-apps.document" in mime:
-                        er = await client.get(
-                            f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
-                            headers={"Authorization": f"Bearer {token}"},
-                            params={"mimeType": "text/plain"}, timeout=15,
-                        )
-                        text = er.text if er.is_success else ""
-                    else:
-                        dr = await client.get(
-                            f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
-                            headers={"Authorization": f"Bearer {token}"}, timeout=15,
-                        )
-                        text = extract_text(Path(name).suffix.lower(), dr.content) if dr.is_success else ""
-                    name_lower = name.lower()
-                    # Only filter explicit template/config files, not any doc that happens to have "template" in the name
-                    is_template = (
-                        re.search(r'(^|\s|-)template(\s|-|$)', name_lower) is not None
-                        or name_lower.endswith((".md", ".txt"))
-                        or "application/vnd.google-apps.shortcut" in mime
-                        or "application/vnd.google-apps.folder" in mime
-                    )
-                    if is_template:
-                        logger.info("Graph: skipping template/shortcut file '%s' (%s)", name, doc_type)
-                        continue
-                    results.append({"id": file_id, "name": name, "type": doc_type,
-                                    "link": link, "modified": f.get("modifiedTime", ""), "text": text[:8000]})
-                except Exception as exc:
-                    logger.warning("Failed to read %s '%s': %s", doc_type, name, exc)
+                name_lower, mime = f.get("name", "").lower(), f.get("mimeType", "")
+                # Only filter explicit template/config files, not any doc that happens to have "template" in the name
+                is_template = (
+                    re.search(r'(^|\s|-)template(\s|-|$)', name_lower) is not None
+                    or name_lower.endswith((".md", ".txt"))
+                    or "application/vnd.google-apps.shortcut" in mime
+                    or "application/vnd.google-apps.folder" in mime
+                )
+                if is_template:
+                    logger.info("Graph: skipping template/shortcut file '%s' (%s)", f.get("name", ""), doc_type)
+                    continue
+                docs.append(f)
+
+            fetched = await asyncio.gather(
+                *(_fetch_one_folder_file(client, token, f, doc_type) for f in docs)
+            )
+            return [d for d in fetched if d is not None]
     except Exception as exc:
         logger.warning("Folder fetch failed for %s: %s", doc_type, exc)
-    return results
+        return []
 
 
 def _re_field(text: str, field: str) -> str:
@@ -1324,7 +1347,7 @@ async def _infer_edges(nodes: list[dict], explicit_edges: list[dict]) -> list[di
     valid_ids = {n["id"] for n in nodes}
     inferred = []
 
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel(MODEL_NAME)
 
     def _summarise(node_list):
         return "\n".join(
@@ -1332,10 +1355,24 @@ async def _infer_edges(nodes: list[dict], explicit_edges: list[dict]) -> list[di
             for n in node_list
         )
 
-    if unlinked_sources and brds:
+    async def _infer(prompt: str, label: str) -> list[dict]:
+        edges = []
         try:
-            resp = model.generate_content(
-                f"""Determine which CRD/IRD documents are related to which BRD documents based on content alignment.
+            resp = await model.generate_content_async(prompt)
+            m = re.search(r'\{.*\}', resp.text, re.DOTALL)
+            if m:
+                for e in json.loads(m.group()).get("edges", []):
+                    if e.get("confidence", 0) >= 0.5 and e["source"] in valid_ids and e["target"] in valid_ids:
+                        edges.append({"source": e["source"], "target": e["target"],
+                                      "method": "inferred", "confidence": round(e["confidence"], 2)})
+        except Exception as exc:
+            logger.warning("AI inference (%s) failed: %s", label, exc)
+        return edges
+
+    tasks = []
+    if unlinked_sources and brds:
+        tasks.append(_infer(
+            f"""Determine which CRD/IRD documents are related to which BRD documents based on content alignment.
 
 CRD/IRD (sources):
 {_summarise(unlinked_sources)}
@@ -1344,21 +1381,12 @@ BRD (targets):
 {_summarise(brds)}
 
 Return ONLY JSON: {{"edges":[{{"source":"drive_id","target":"drive_id","confidence":0.9}}]}}
-Only create edges with clear content alignment. confidence 0.5–1.0. Empty array if none."""
-            )
-            m = re.search(r'\{.*\}', resp.text, re.DOTALL)
-            if m:
-                for e in json.loads(m.group()).get("edges", []):
-                    if e.get("confidence", 0) >= 0.5 and e["source"] in valid_ids and e["target"] in valid_ids:
-                        inferred.append({"source": e["source"], "target": e["target"],
-                                         "method": "inferred", "confidence": round(e["confidence"], 2)})
-        except Exception as exc:
-            logger.warning("AI inference (CRD→BRD) failed: %s", exc)
-
+Only create edges with clear content alignment. confidence 0.5–1.0. Empty array if none.""",
+            "CRD→BRD",
+        ))
     if brds and prds:
-        try:
-            resp = model.generate_content(
-                f"""Determine which BRD documents are fulfilled by which PRD documents.
+        tasks.append(_infer(
+            f"""Determine which BRD documents are fulfilled by which PRD documents.
 
 BRD (sources — defines business needs):
 {_summarise(brds)}
@@ -1367,16 +1395,12 @@ PRD (targets — defines product features being built):
 {_summarise(prds)}
 
 Return ONLY JSON: {{"edges":[{{"source":"brd_drive_id","target":"prd_drive_id","confidence":0.9}}]}}
-Only create edges where the PRD clearly addresses the BRD's requirements. confidence 0.5–1.0."""
-            )
-            m = re.search(r'\{.*\}', resp.text, re.DOTALL)
-            if m:
-                for e in json.loads(m.group()).get("edges", []):
-                    if e.get("confidence", 0) >= 0.5 and e["source"] in valid_ids and e["target"] in valid_ids:
-                        inferred.append({"source": e["source"], "target": e["target"],
-                                         "method": "inferred", "confidence": round(e["confidence"], 2)})
-        except Exception as exc:
-            logger.warning("AI inference (BRD→PRD) failed: %s", exc)
+Only create edges where the PRD clearly addresses the BRD's requirements. confidence 0.5–1.0.""",
+            "BRD→PRD",
+        ))
+
+    for batch in await asyncio.gather(*tasks):
+        inferred.extend(batch)
 
     return inferred
 
@@ -1476,7 +1500,7 @@ async def brd_analyze(
     )
 
     model = get_brd_model(load_brd_context())
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Analyze the uploaded CRD documents and compare each distinct client requirement against the existing BRDs listed below.
 
 EXTRACTION RULES — follow these exactly:
@@ -1548,19 +1572,7 @@ EXISTING BRDs:
 {brd_blocks}"""
     )
 
-    raw = response.text.strip()
-    if "```" in raw:
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-    raw = raw.rstrip("`").strip()
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.error("Match JSON parse error: %s | raw: %s", exc, raw[:300])
-        raise HTTPException(status_code=500, detail="Failed to parse match results from model")
+    data = parse_json_response(response.text, "Failed to parse match results from model")
 
     # Guard against hallucinated matches: every BRD a requirement claims to be
     # covered by must actually exist in the Drive folder. Validate the whole
@@ -1626,13 +1638,7 @@ async def brd_analyze_gap(req: AnalyzeGapRequest, _: dict = Depends(require_auth
     file_id = m.group(1)
 
     try:
-        from google.oauth2.service_account import Credentials
-        from google.auth.transport.requests import Request as GoogleAuthRequest
-
-        scopes = ["https://www.googleapis.com/auth/drive.readonly"]
-        creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
-        creds.refresh(GoogleAuthRequest())
-        token = creds.token
+        token = await _get_drive_token(readonly=True)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Drive auth failed: {exc}")
 
@@ -1655,7 +1661,7 @@ async def brd_analyze_gap(req: AnalyzeGapRequest, _: dict = Depends(require_auth
         raise HTTPException(status_code=500, detail="Could not retrieve existing BRD content from Drive")
 
     model = get_brd_model(load_brd_context())
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Analyze the gap between an existing BRD and a new client requirement. Identify exactly what needs to change in the existing BRD to cover this new requirement.
 
 New Requirement: {req.requirement_name}
@@ -1680,21 +1686,7 @@ Return ONLY a valid JSON object — no preamble, no explanation, no markdown fen
 }}"""
     )
 
-    raw = response.text.strip()
-    if "```" in raw:
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-    raw = raw.rstrip("`").strip()
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.error("Gap JSON parse error: %s | raw: %s", exc, raw[:300])
-        raise HTTPException(status_code=500, detail="Failed to parse gap report from model")
-
-    return data
+    return parse_json_response(response.text, "Failed to parse gap report from model")
 
 
 @app.post("/brd/clarify")
@@ -1706,7 +1698,7 @@ async def brd_clarify(req: ClarifyRequest, _: dict = Depends(require_auth)):
             f"Q: {a['question']}\nA: {a['answer']}" for a in req.answers
         )
 
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Based on the source documents and analysis below, generate 3–5 targeted clarifying questions needed to define the scope and structure of the BRD.
 
 Focus questions on:
@@ -1738,7 +1730,7 @@ async def brd_generate(req: GenerateRequest, _: dict = Depends(require_auth)):
 
     today = datetime.date.today().isoformat()
 
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""Generate a complete, professionally formatted BRD document following the BRD template in your context.
 
 Source Documents:
@@ -1765,7 +1757,7 @@ async def brd_regenerate(req: BrdRegenerateRequest, _: dict = Depends(require_au
         raise HTTPException(status_code=400, detail="section is required")
     model = get_brd_model(load_brd_context())
     instruction_line = f"\nAdditional instructions: {req.instruction.strip()}" if req.instruction.strip() else ""
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""You are given a complete BRD document in Markdown format. Rewrite ONLY the section named below. Do not alter any other section, heading, or content.
 
 Section to regenerate: {req.section.strip()}{instruction_line}
@@ -1788,16 +1780,19 @@ DOCS_FOLDER_MAP = {
 
 
 async def _get_drive_token(readonly: bool = True) -> str:
-    from google.oauth2.service_account import Credentials
-    from google.auth.transport.requests import Request as GoogleAuthRequest
-    scope = (
-        "https://www.googleapis.com/auth/drive.readonly"
-        if readonly
-        else "https://www.googleapis.com/auth/drive"
-    )
-    creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=[scope])
-    creds.refresh(GoogleAuthRequest())
-    return creds.token
+    def _fetch() -> str:
+        from google.oauth2.service_account import Credentials
+        from google.auth.transport.requests import Request as GoogleAuthRequest
+        scope = (
+            "https://www.googleapis.com/auth/drive.readonly"
+            if readonly
+            else "https://www.googleapis.com/auth/drive"
+        )
+        creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=[scope])
+        creds.refresh(GoogleAuthRequest())  # sync HTTP — keep off the event loop
+        return creds.token
+
+    return await asyncio.to_thread(_fetch)
 
 
 async def _list_folder_metadata(client: httpx.AsyncClient, token: str, folder_id: str, doc_type: str) -> list[dict]:
@@ -1891,17 +1886,18 @@ def _docx_to_markdown(docx_bytes: bytes) -> str:
                 rows.append('|' + '|'.join([' --- ' for _ in cells]) + '|')
         return rows
 
+    from docx.text.paragraph import Paragraph as DocxParagraph
+    from docx.table import Table as DocxTable
+
     parts = []
     # Iterate body children to preserve paragraph/table order
     for child in doc.element.body:
         tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
         if tag == 'p':
-            from docx.text.paragraph import Paragraph as DocxParagraph
             md = _para_to_md(DocxParagraph(child, doc))
             if md:
                 parts.append(md)
         elif tag == 'tbl':
-            from docx.table import Table as DocxTable
             parts.extend(_table_to_md(DocxTable(child, doc)))
 
     text = '\n\n'.join(parts)
@@ -2202,7 +2198,7 @@ async def regenerate_doc_section(doc_id: str, req: DocRegenerateRequest, _: dict
     field_key = _doc_field_key(req.doc_type)
     instruction_line = f"\nAdditional instructions: {req.instruction.strip()}" if req.instruction.strip() else ""
 
-    response = model.generate_content(
+    response = await model.generate_content_async(
         f"""You are given a complete document in Markdown for context. Rewrite ONLY the one section named below and return JUST that section — not the whole document.
 
 Section to regenerate: {req.section_heading.strip()}{instruction_line}
@@ -2410,14 +2406,8 @@ async def brd_log_to_sheet(req: BrdLogToSheetRequest, _: dict = Depends(require_
     crds = extract_brd_crds(req.brd)
     initials = generate_br_initials(title)
 
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_file(str(CREDENTIALS_PATH), scopes=scopes)
-        gc = gspread.authorize(creds)
-        ws = gc.open_by_key(SHEET_ID).worksheet("BR")
+    def _write():
+        ws = _open_worksheet("BR")
 
         existing_ids = ws.col_values(1)
         prefix = f"{initials}-"
@@ -2442,6 +2432,9 @@ async def brd_log_to_sheet(req: BrdLogToSheetRequest, _: dict = Depends(require_
             value_input_option="RAW",
             insert_data_option="INSERT_ROWS",
         )
+
+    try:
+        await asyncio.to_thread(_write)
     except Exception as exc:
         logger.warning("BR sheet write failed in /brd/log-to-sheet (%s)", exc)
         return {"status": "warning", "message": str(exc)}

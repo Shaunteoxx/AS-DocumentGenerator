@@ -14,7 +14,10 @@ AS-CRD/
 ├── CLAUDE.md
 ├── frontend/
 │   └── src/
-│       ├── App.jsx
+│       ├── App.jsx                 # routes are lazy-loaded (React.lazy) per page
+│       ├── constants.js            # API base URL, LOGO_URL, TAB_ROUTES
+│       ├── hooks/
+│       │   └── useCorridorAuth.js  # shared Corridor auth gate + OAuth redirect
 │       ├── pages/
 │       │   ├── CRDPage.jsx
 │       │   ├── BRDPage.jsx
@@ -23,9 +26,11 @@ AS-CRD/
 │       │   ├── GraphPage.jsx       # document relationship graph
 │       │   ├── DocsPage.jsx        # Document Review Hub — library of Drive docs
 │       │   ├── DocViewerPage.jsx   # per-section comment & AI regenerate
-│       │   ├── HomePage.jsx
 │       │   └── AuthCallbackPage.jsx
 │       └── components/
+│           ├── AppHeader.jsx       # shared header + PhaseStepper + DocsNavButton
+│           ├── HistorySidebar.jsx  # shared collapsible "Recent docs" sidebar
+│           ├── ErrorBanner.jsx     # shared error alert
 │           ├── UploadArea.jsx      # shared across all doc pages
 │           ├── CRDOutput.jsx
 │           ├── CRDReview.jsx
@@ -69,6 +74,8 @@ Each doc type has its own route and context data folder:
 ### API
 - Built with FastAPI
 - Calls the **Google Gemini API** (`gemini-2.5-flash`) for all document generation and AI inference
+- **All blocking I/O stays off the event loop:** Gemini calls use `generate_content_async`; gspread/Sheets writes, Drive token refreshes (`_get_drive_token`), and JWT verification run via `asyncio.to_thread`. Don't reintroduce sync `generate_content` or bare gspread calls in `async def` endpoints — one long generation would stall every concurrent request
+- The Allocate Space features sheet (`get_features_from_sheet`) is cached in-memory for 5 min (`_features_cache`), like the BRD corpus
 - Generated/regenerated document content is passed through `strip_code_fences()` before returning — the model sometimes wraps the whole doc in a ` ```markdown ` fence, which would otherwise render as one literal code block (raw `#`/`**`/`-`) in the exported Google Doc. Frontend `stripCodeFences()` (in `utils.js`, used in the export path) is a second guard for already-stored content.
 - Uses Google Drive API (service account) to read/export documents for the graph feature and the Document Review Hub
 - Uses the Google Docs API (service account) to surgically edit document sections in place (Review Hub write-back)
@@ -104,10 +111,11 @@ uvicorn main:app --reload
 
 ## Frontend
 
-- React with React Router; default route `/` redirects to `/crd`
+- React with React Router; default route `/` redirects to `/crd`; all routes lazy-loaded via `React.lazy` (keep it that way — it's what code-splits the bundle)
+- Shared chrome lives in `AppHeader.jsx` (header + `PhaseStepper` + `DocsNavButton`), `HistorySidebar.jsx`, and `ErrorBanner.jsx`; per-doc-type accent colors: CRD=blue, BRD=violet, IRD=emerald, PRD=orange
 - Shared `UploadArea` component used across all doc type pages
-- Collapsible "Recent Documents" sidebar
-- Auth via Corridor — Bearer token stored in sessionStorage
+- Auth via Corridor — Bearer token stored in sessionStorage; the page gate is the shared `useCorridorAuth(redirectPath)` hook
+- Typography: Plus Jakarta Sans (loaded in `index.css`, wired as `font-sans` in `tailwind.config.js`)
 - Export to Google Docs
 
 ### Running the frontend

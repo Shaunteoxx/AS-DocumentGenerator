@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import AppHeader from '../components/AppHeader'
 import { authFetch } from '../utils'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from '../constants'
 
 // Same parseSections used in CRDReview / BRDReview / IRDReview.
 // Splits on H1 (#), H2 (##) and H3 (###) boundaries so docs work whether their
@@ -419,46 +419,25 @@ export default function DocViewerPage() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-zinc-50 text-zinc-900">
-      {/* Header */}
-      <header className="sticky top-0 z-40 w-full bg-white border-b border-zinc-200">
-        <div className="w-full max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <button
-            className="flex items-center gap-3 cursor-pointer group"
-            onClick={() => navigate('/crd')}
+      <AppHeader subtitle="Document Review" onLogoClick={() => navigate('/crd')}>
+        {doc?.drive_link && (
+          <a
+            href={doc.drive_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 transition-colors duration-150"
           >
-            <div className="bg-white p-1.5 rounded-lg border border-zinc-100 shadow-sm overflow-hidden flex items-center justify-center">
-              <img
-                src="https://firebasestorage.googleapis.com/v0/b/sg-as-price-list.firebasestorage.app/o/Screenshot%202026-02-04%20021131.png?alt=media"
-                alt="Allocate Space Logo"
-                className="h-8 w-auto object-contain"
-              />
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="font-bold text-sm text-zinc-900 group-hover:text-indigo-700 transition-colors">Allocate Space</span>
-              <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">AI Assisted Generator</span>
-            </div>
-          </button>
-          <div className="flex items-center gap-3">
-            {doc?.drive_link && (
-              <a
-                href={doc.drive_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-800 transition-colors"
-              >
-                <ExternalLinkIcon className="w-3.5 h-3.5" />
-                Open in Drive
-              </a>
-            )}
-            <button
-              onClick={() => navigate('/docs')}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 transition-all cursor-pointer"
-            >
-              ← Library
-            </button>
-          </div>
-        </div>
-      </header>
+            <ExternalLinkIcon className="w-3.5 h-3.5" />
+            Open in Drive
+          </a>
+        )}
+        <button
+          onClick={() => navigate('/docs')}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 transition-colors duration-150 cursor-pointer"
+        >
+          ← Library
+        </button>
+      </AppHeader>
 
       {/* Doc title bar */}
       {!loading && doc && (

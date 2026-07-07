@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AppHeader from '../components/AppHeader'
 import { authFetch } from '../utils'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from '../constants'
 
 const TYPE = {
   crd: { label: 'CRD', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-50 text-blue-700 border-blue-100', stroke: '#93c5fd' },
@@ -153,45 +153,32 @@ export default function GraphPage() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-zinc-900 bg-zinc-50">
-      <header className="sticky top-0 z-40 w-full bg-white border-b border-zinc-200">
-        <div className="w-full max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate('/crd')}>
-            <div className="bg-white p-1.5 rounded-lg border border-zinc-100 shadow-sm overflow-hidden flex items-center justify-center">
-              <img src="https://firebasestorage.googleapis.com/v0/b/sg-as-price-list.firebasestorage.app/o/Screenshot%202026-02-04%20021131.png?alt=media" alt="Allocate Space Logo" className="h-8 w-auto object-contain" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-sm text-zinc-900">Allocate Space</span>
-              <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Document Graph</span>
-            </div>
+      <AppHeader subtitle="Document Graph" onLogoClick={() => navigate('/crd')}>
+        {data && (
+          <div className="flex items-center gap-3 text-xs text-zinc-400">
+            <span>{data.nodes.length} documents</span>
+            <span>·</span>
+            <span className="text-blue-600 font-medium">{explicitCount} explicit</span>
+            <span>·</span>
+            <span className="text-violet-500 font-medium">{inferredCount} inferred</span>
+            {data.cached && <span className="text-amber-500">· cached</span>}
           </div>
-          <div className="flex items-center gap-4">
-            {data && (
-              <div className="flex items-center gap-3 text-xs text-gray-400">
-                <span>{data.nodes.length} documents</span>
-                <span>·</span>
-                <span className="text-blue-600 font-medium">{explicitCount} explicit</span>
-                <span>·</span>
-                <span className="text-violet-500 font-medium">{inferredCount} inferred</span>
-                {data.cached && <span className="text-amber-500">· cached</span>}
-              </div>
-            )}
-            <button
-              onClick={() => fetchGraph(true)}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
-            >
-              <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {loading ? 'Loading…' : 'Refresh'}
-            </button>
-            <button onClick={() => navigate('/crd')} className="text-xs text-zinc-400 hover:text-zinc-600 flex items-center gap-1">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-              Back
-            </button>
-          </div>
-        </div>
-      </header>
+        )}
+        <button
+          onClick={() => fetchGraph(true)}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-600 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 transition-colors duration-150 cursor-pointer"
+        >
+          <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {loading ? 'Loading…' : 'Refresh'}
+        </button>
+        <button onClick={() => navigate('/crd')} className="text-xs text-zinc-500 hover:text-zinc-700 flex items-center gap-1 cursor-pointer">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          Back
+        </button>
+      </AppHeader>
 
       <main className="flex-1 p-8">
         {error && (

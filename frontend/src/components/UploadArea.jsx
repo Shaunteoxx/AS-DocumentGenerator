@@ -65,8 +65,8 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
     <div className="flex flex-col items-center w-full">
       {/* Dynamic title */}
       <div className="text-center mb-6">
-        <h1 className="text-4xl font-bold text-gray-900" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>{TAB_META[activeTab]?.title}</h1>
-        <p className="text-sm text-gray-500 mt-2">{TAB_META[activeTab]?.subtitle}</p>
+        <h1 className="text-4xl font-bold tracking-tight text-zinc-900">{TAB_META[activeTab]?.title}</h1>
+        <p className="text-sm text-zinc-500 mt-2">{TAB_META[activeTab]?.subtitle}</p>
       </div>
 
       {/* Tabs — 2×2 grid */}
@@ -75,10 +75,11 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
           <button
             key={tab}
             onClick={() => onTabChange(tab)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 text-center ${
+            aria-current={activeTab === tab ? 'page' : undefined}
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 text-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
               activeTab === tab
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-700'
             }`}
           >
             {tab}
@@ -87,13 +88,14 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
       </div>
 
       {/* Card */}
-      <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full bg-white rounded-2xl shadow-xl ring-1 ring-zinc-950/5 overflow-hidden">
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={9}
           placeholder={PLACEHOLDERS[activeTab]}
-          className="w-full px-6 pt-6 pb-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-900/15 rounded-t-2xl resize-none leading-relaxed"
+          aria-label={`${TAB_META[activeTab]?.title || 'Document'} source notes`}
+          className="w-full px-6 pt-6 pb-4 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-900/15 rounded-t-2xl resize-none leading-relaxed"
         />
 
         {charWarning && (
@@ -143,16 +145,16 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors font-medium"
+              className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-800 transition-colors duration-150 font-medium cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded"
             >
-              <span className="text-base font-light leading-none">+</span>
+              <span className="text-base font-light leading-none" aria-hidden="true">+</span>
               <span>Attach</span>
             </button>
             {notes.trim() && (
               <button
                 type="button"
                 onClick={() => { setNotes(''); setFiles([]) }}
-                className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-sm text-zinc-500 hover:text-zinc-700 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded"
               >
                 Clear
               </button>
@@ -162,7 +164,7 @@ export default function UploadArea({ notes, setNotes, files, setFiles, onAnalyze
           <button
             onClick={onAnalyze}
             disabled={!canAnalyze || loading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2"
           >
             {loading ? (
               <>

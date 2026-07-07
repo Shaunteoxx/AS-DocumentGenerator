@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AppHeader from '../components/AppHeader'
 import { authFetch } from '../utils'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from '../constants'
 
 const TYPE_CONFIG = {
   crd: {
@@ -100,35 +100,14 @@ export default function DocsPage() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-zinc-50 text-zinc-900">
-      {/* Header */}
-      <header className="sticky top-0 z-40 w-full bg-white border-b border-zinc-200">
-        <div className="w-full max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <button
-            className="flex items-center gap-3 cursor-pointer group"
-            onClick={() => navigate('/crd')}
-          >
-            <div className="bg-white p-1.5 rounded-lg border border-zinc-100 shadow-sm overflow-hidden flex items-center justify-center">
-              <img
-                src="https://firebasestorage.googleapis.com/v0/b/sg-as-price-list.firebasestorage.app/o/Screenshot%202026-02-04%20021131.png?alt=media"
-                alt="Allocate Space Logo"
-                className="h-8 w-auto object-contain"
-              />
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="font-bold text-sm text-zinc-900 group-hover:text-indigo-700 transition-colors">Allocate Space</span>
-              <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">AI Assisted Generator</span>
-            </div>
-          </button>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/crd')}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 transition-all"
-            >
-              ← Generator
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader subtitle="Document Library" onLogoClick={() => navigate('/crd')}>
+        <button
+          onClick={() => navigate('/crd')}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 transition-colors duration-150 cursor-pointer"
+        >
+          ← Generator
+        </button>
+      </AppHeader>
 
       {/* Page hero */}
       <div className="bg-white border-b border-zinc-100">
@@ -235,8 +214,11 @@ export default function DocsPage() {
               return (
                 <div
                   key={doc.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => navigate(`/docs/${doc.id}?type=${doc.type}`)}
-                  className={`group bg-white border border-zinc-200 border-l-4 ${cfg.border} rounded-xl p-5 cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-zinc-300 transition-all duration-200`}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/docs/${doc.id}?type=${doc.type}`) } }}
+                  className={`group bg-white border border-zinc-200 border-l-4 ${cfg.border} rounded-xl p-5 cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-zinc-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 transition-all duration-200`}
                 >
                   {/* Top row */}
                   <div className="flex items-center justify-between mb-3">
